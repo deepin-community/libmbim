@@ -1,23 +1,10 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
- *
  * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2022 Intel Corporation
  */
 
 #ifndef _LIBMBIM_GLIB_H_
@@ -35,9 +22,11 @@
 #include "mbim-device.h"
 #include "mbim-enums.h"
 #include "mbim-proxy.h"
+#include "mbim-tlv.h"
 
 /* generated */
 #include "mbim-enum-types.h"
+#include "mbim-flag-types.h"
 #include "mbim-error-types.h"
 #include "mbim-basic-connect.h"
 #include "mbim-sms.h"
@@ -48,10 +37,19 @@
 #include "mbim-dss.h"
 #include "mbim-ms-firmware-id.h"
 #include "mbim-ms-host-shutdown.h"
+#include "mbim-ms-sar.h"
 #include "mbim-qmi.h"
 #include "mbim-atds.h"
+#include "mbim-qdu.h"
 #include "mbim-intel-firmware-update.h"
 #include "mbim-ms-basic-connect-extensions.h"
+#include "mbim-ms-uicc-low-level-access.h"
+#include "mbim-quectel.h"
+#include "mbim-intel-thermal-rf.h"
+#include "mbim-ms-voice-extensions.h"
+#include "mbim-intel-mutual-authentication.h"
+#include "mbim-intel-tools.h"
+#include "mbim-google.h"
 
 /* backwards compatibility */
 #include "mbim-compat.h"

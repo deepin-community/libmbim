@@ -1,24 +1,10 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
- *
  * Copyright (C) 2013 - 2018 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2022 Intel Corporation
  */
 
 #ifndef _LIBMBIM_GLIB_MBIM_CID_H_
@@ -234,9 +220,26 @@ typedef enum { /*< since=1.8 >*/
 } MbimCidMsHostShutdown;
 
 /**
+ * MbimCidMsSar:
+ * @MBIM_CID_MS_SAR_UNKNOWN: Unknown command.
+ * @MBIM_CID_MS_SAR_CONFIG: SAR backoff mode and level configuration.
+ * @MBIM_CID_MS_SAR_TRANSMISSION_STATUS: Transmission status indication setup.
+ *
+ * MBIM commands in the %MBIM_SERVICE_MS_SAR service.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_CID_MS_SAR_UNKNOWN             = 0,
+    MBIM_CID_MS_SAR_CONFIG              = 1,
+    MBIM_CID_MS_SAR_TRANSMISSION_STATUS = 2
+} MbimCidMsSar;
+
+/**
  * MbimCidProxyControl:
  * @MBIM_CID_PROXY_CONTROL_UNKNOWN: Unknown command.
  * @MBIM_CID_PROXY_CONTROL_CONFIGURATION: Configuration.
+ * @MBIM_CID_PROXY_CONTROL_VERSION: MBIM and MBIMEx Version reporting.
  *
  * MBIM commands in the %MBIM_SERVICE_PROXY_CONTROL service.
  *
@@ -244,7 +247,8 @@ typedef enum { /*< since=1.8 >*/
  */
 typedef enum { /*< since=1.10 >*/
     MBIM_CID_PROXY_CONTROL_UNKNOWN       = 0,
-    MBIM_CID_PROXY_CONTROL_CONFIGURATION = 1
+    MBIM_CID_PROXY_CONTROL_CONFIGURATION = 1,
+    MBIM_CID_PROXY_CONTROL_VERSION       = 2,
 } MbimCidProxyControl;
 
 /**
@@ -298,18 +302,46 @@ typedef enum { /*< since=1.16 >*/
 } MbimCidIntelFirmwareUpdate;
 
 /**
+ * MbimCidQdu:
+ * @MBIM_CID_QDU_UNKNOWN: Unknown command.
+ * @MBIM_CID_QDU_UPDATE_SESSION: Update session command.
+ * @MBIM_CID_QDU_FILE_OPEN: Open QDU file for firmware update.
+ * @MBIM_CID_QDU_FILE_WRITE: Write QDU file for firmware update.
+ * @MBIM_CID_QDU_QUECTEL_REBOOT: Reboot to Emergency Download (Quectel specific). Since 1.28.
+ * @MBIM_CID_QDU_QUECTEL_READ_VERSION: Read firmware version (Quectel specific). Since 1.28.
+ *
+ * MBIM commands in the %MBIM_SERVICE_QDU service.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_CID_QDU_UNKNOWN             = 0,
+    MBIM_CID_QDU_UPDATE_SESSION      = 1,
+    MBIM_CID_QDU_FILE_OPEN           = 2,
+    MBIM_CID_QDU_FILE_WRITE          = 3,
+    MBIM_CID_QDU_QUECTEL_REBOOT      = 4,
+    MBIM_CID_QDU_QUECTEL_READ_VERSION = 7
+} MbimCidQdu;
+
+/**
  * MbimCidMsBasicConnectExtensions:
  * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_UNKNOWN: Unknown command.
  * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_PROVISIONED_CONTEXTS: Provisioned contexts (v2).
- * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_NETWORK_BLACKLIST: Network blacklist.
+ * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_NETWORK_DENYLIST: Network denylist. Since 1.28.
  * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LTE_ATTACH_CONFIGURATION: LTE attach configuration.
- * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LTE_ATTACH_STATUS: LTE attach status.
+ * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LTE_ATTACH_INFO: LTE attach status information. Since 1.26.
  * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_SYS_CAPS: System capabilities.
  * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_DEVICE_CAPS: Device capabilities (v2).
  * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_DEVICE_SLOT_MAPPINGS: Device slot mappings.
  * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_SLOT_INFO_STATUS: Slot info status.
  * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_PCO: Protocol configuration operations (PCO).
  * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_DEVICE_RESET: Device reset.
+ * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_BASE_STATIONS_INFO: Base stations info. Since 1.28.
+ * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LOCATION_INFO_STATUS: Location info status. Since 1.28.
+ * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_VERSION: Protocol version query and report, defined in MBIMEx v2.0. Since 1.28.
+ * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_MODEM_CONFIGURATION: Modem configuration status, defined in MBIMEx v3.0. Since 1.28.
+ * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_REGISTRATION_PARAMETERS: Registration parameters, defined in MBIMEx v3.0. Since 1.28.
+ * @MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_WAKE_REASON: Protocol wake reason query and report, defined in MBIMEx v3.0. Since 1.28
  *
  * MBIM commands in the %MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS service.
  *
@@ -318,18 +350,140 @@ typedef enum { /*< since=1.16 >*/
 typedef enum { /*< since=1.18 >*/
     MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_UNKNOWN                  = 0,
     MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_PROVISIONED_CONTEXTS     = 1,
-    MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_NETWORK_BLACKLIST        = 2,
+    MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_NETWORK_DENYLIST         = 2,
     MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LTE_ATTACH_CONFIGURATION = 3,
-    MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LTE_ATTACH_STATUS        = 4,
+    MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LTE_ATTACH_INFO          = 4,
     MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_SYS_CAPS                 = 5,
     MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_DEVICE_CAPS              = 6,
     MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_DEVICE_SLOT_MAPPINGS     = 7,
     MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_SLOT_INFO_STATUS         = 8,
     MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_PCO                      = 9,
     MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_DEVICE_RESET             = 10,
+    MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_BASE_STATIONS_INFO       = 11,
+    MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LOCATION_INFO_STATUS     = 12,
+    MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_VERSION                  = 15,
+    MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_MODEM_CONFIGURATION      = 16,
+    MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_REGISTRATION_PARAMETERS  = 17,
+    MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_WAKE_REASON              = 19,
 } MbimCidMsBasicConnectExtensions;
 
 /* Command helpers */
+
+/**
+ * MbimCidMsUiccLowLevelAccess:
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_UNKNOWN: Unknown command.
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_ATR: ATR.
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_OPEN_CHANNEL: Open Channel.
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_CLOSE_CHANNEL: Close Channel.
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_APDU: Apdu.
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_TERMINAL_CAPABILITY: Terminal capabilities.
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_RESET: Reset.
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_APPLICATION_LIST: Retrieve application list. Since 1.28.
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_FILE_STATUS: Retrieve information about a specific UICC file. Since 1.28.
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_READ_BINARY: Read a UICC binary file. Since 1.28.
+ * @MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_READ_RECORD: Read a UICC linear fixed or cyclic file. Since 1.28.
+ *
+ * MBIM commands in the %MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS service.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_UNKNOWN              = 0,
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_ATR                  = 1,
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_OPEN_CHANNEL         = 2,
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_CLOSE_CHANNEL        = 3,
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_APDU                 = 4,
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_TERMINAL_CAPABILITY  = 5,
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_RESET                = 6,
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_APPLICATION_LIST     = 7,
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_FILE_STATUS          = 8,
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_READ_BINARY          = 9,
+    MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_READ_RECORD          = 10,
+} MbimCidMsUiccLowLevelAccess;
+
+/**
+ * MbimCidQuectel:
+ * @MBIM_CID_QUECTEL_UNKNOWN: Unknown command.
+ * @MBIM_CID_QUECTEL_RADIO_STATE: Radio state.
+ *
+ * MBIM commands in the %MBIM_SERVICE_QUECTEL service.
+ *
+ * Since: 1.26.2
+ */
+typedef enum { /*< since=1.26.2 >*/
+    MBIM_CID_QUECTEL_UNKNOWN     = 0,
+    MBIM_CID_QUECTEL_RADIO_STATE = 1,
+} MbimCidQuectel;
+
+/**
+ * MbimCidIntelThermalRf:
+ * @MBIM_CID_INTEL_THERMAL_RF_UNKNOWN: Unknown command.
+ * @MBIM_CID_INTEL_THERMAL_RF_RFIM: RFIM frequency command.
+ *
+ * MBIM commands in the %MBIM_SERVICE_INTEL_THERMAL_RF service.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_CID_INTEL_THERMAL_RF_UNKNOWN     = 0,
+    MBIM_CID_INTEL_THERMAL_RF_RFIM        = 9,
+} MbimCidIntelThermalRf;
+
+/**
+ * MbimCidMsVoiceExtensions:
+ * @MBIM_CID_MS_VOICE_EXTENSIONS_UNKNOWN: Unknown command.
+ * @MBIM_CID_MS_VOICE_EXTENSIONS_NITZ: Network Identity and Time Zone information command.
+ *
+ * MBIM commands in the %MBIM_SERVICE_MS_VOICE_EXTENSIONS service.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_CID_MS_VOICE_EXTENSIONS_UNKNOWN = 0,
+    MBIM_CID_MS_VOICE_EXTENSIONS_NITZ    = 10,
+} MbimCidMsVoiceExtensions;
+
+/**
+ * MbimCidIntelMutualAuthentication:
+ * @MBIM_CID_INTEL_MUTUAL_AUTHENTICATION_UNKNOWN: Unknown command.
+ * @MBIM_CID_INTEL_MUTUAL_AUTHENTICATION_FCC_LOCK: FCC lock set.
+ *
+ * MBIM commands in the %MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION service.
+ *
+ * Since: 1.30
+ */
+typedef enum { /*< since=1.30 >*/
+    MBIM_CID_INTEL_MUTUAL_AUTHENTICATION_UNKNOWN  = 0,
+    MBIM_CID_INTEL_MUTUAL_AUTHENTICATION_FCC_LOCK = 1,
+} MbimCidIntelMutualAuthentication;
+
+/**
+ * MbimCidIntelTools:
+ * @MBIM_CID_INTEL_TOOLS_UNKNOWN: Unknown command.
+ * @MBIM_CID_INTEL_TOOLS_TRACE_CONFIG: Configure Modem traces.
+ *
+ * MBIM commands in the %MBIM_SERVICE_INTEL_TOOLS service.
+ *
+ * Since: 1.30
+ */
+typedef enum { /*< since=1.30 >*/
+    MBIM_CID_INTEL_TOOLS_UNKNOWN      = 0,
+    MBIM_CID_INTEL_TOOLS_TRACE_CONFIG = 8,
+} MbimCidIntelTools;
+
+/**
+ * MbimCidGoogle:
+ * @MBIM_CID_GOOGLE_UNKNOWN: Unknown command.
+ * @MBIM_CID_GOOGLE_CARRIER_LOCK: Carrier lock.
+ *
+ * MBIM commands in the %MBIM_SERVICE_GOOGLE service.
+ *
+ * Since: 1.30
+ */
+typedef enum { /*< since=1.30 >*/
+    MBIM_CID_GOOGLE_UNKNOWN      = 0,
+    MBIM_CID_GOOGLE_CARRIER_LOCK = 1,
+} MbimCidGoogle;
 
 /**
  * mbim_cid_can_set:

@@ -1,24 +1,10 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
- *
  * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2022 Intel Corporation
  */
 
 #ifndef _LIBMBIM_GLIB_MBIM_UUID_H_
@@ -122,6 +108,15 @@ gboolean mbim_uuid_from_printable (const gchar *str,
  * @MBIM_SERVICE_ATDS: ATT Device service. Since 1.16.
  * @MBIM_SERVICE_INTEL_FIRMWARE_UPDATE: Intel firmware update service. Since 1.16.
  * @MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS: Microsoft basic connectivity extensions service. Since 1.18.
+ * @MBIM_SERVICE_MS_SAR: Microsoft SAR service. Since 1.26.
+ * @MBIM_SERVICE_QDU: QDU firmware update service. Since 1.26.
+ * @MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS: Microsoft UICC Low Level Access service. Since 1.26.
+ * @MBIM_SERVICE_QUECTEL: Quectel specific operations. Since 1.26.2.
+ * @MBIM_SERVICE_INTEL_THERMAL_RF: Intel thermal rf related commands. Since 1.28
+ * @MBIM_SERVICE_MS_VOICE_EXTENSIONS: Microsoft Voice extensions service. Since 1.28.
+ * @MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION: Intel mutual authentication commands. Since 1.30.
+ * @MBIM_SERVICE_INTEL_TOOLS: Intel tools service. Since 1.30.
+ * @MBIM_SERVICE_GOOGLE: Google specific service. Since 1.30
  * @MBIM_SERVICE_LAST: Internal value.
  *
  * Enumeration of the generic MBIM services.
@@ -144,6 +139,15 @@ typedef enum { /*< since=1.0 >*/
     MBIM_SERVICE_ATDS                        = 12,
     MBIM_SERVICE_INTEL_FIRMWARE_UPDATE       = 13,
     MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS = 14,
+    MBIM_SERVICE_MS_SAR                      = 15,
+    MBIM_SERVICE_QDU                         = 16,
+    MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS    = 17,
+    MBIM_SERVICE_QUECTEL                     = 18,
+    MBIM_SERVICE_INTEL_THERMAL_RF            = 19,
+    MBIM_SERVICE_MS_VOICE_EXTENSIONS         = 20,
+    MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION = 21,
+    MBIM_SERVICE_INTEL_TOOLS                 = 22,
+    MBIM_SERVICE_GOOGLE                      = 23,
 #if defined LIBMBIM_GLIB_COMPILATION
     MBIM_SERVICE_LAST /*< skip >*/
 #endif
@@ -260,6 +264,17 @@ typedef enum { /*< since=1.0 >*/
 #define MBIM_UUID_MS_HOST_SHUTDOWN mbim_uuid_from_service (MBIM_SERVICE_MS_HOST_SHUTDOWN)
 
 /**
+ * MBIM_UUID_MS_SAR:
+ *
+ * Get the UUID of the %MBIM_SERVICE_MS_SAR service.
+ *
+ * Returns: (transfer none): a #MbimUuid.
+ *
+ * Since: 1.26
+ */
+#define MBIM_UUID_MS_SAR mbim_uuid_from_service (MBIM_SERVICE_MS_SAR)
+
+/**
  * MBIM_UUID_PROXY_CONTROL:
  *
  * Get the UUID of the %MBIM_SERVICE_PROXY_CONTROL service.
@@ -304,6 +319,17 @@ typedef enum { /*< since=1.0 >*/
 #define MBIM_UUID_INTEL_FIRMWARE_UPDATE mbim_uuid_from_service (MBIM_SERVICE_INTEL_FIRMWARE_UPDATE)
 
 /**
+ * MBIM_UUID_QDU:
+ *
+ * Get the UUID of the %MBIM_SERVICE_QDU service.
+ *
+ * Returns: (transfer none): a #MbimUuid.
+ *
+ * Since: 1.26
+ */
+#define MBIM_UUID_QDU mbim_uuid_from_service (MBIM_SERVICE_QDU)
+
+/**
  * MBIM_UUID_MS_BASIC_CONNECT_EXTENSIONS:
  *
  * Get the UUID of the %MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS service.
@@ -313,6 +339,83 @@ typedef enum { /*< since=1.0 >*/
  * Since: 1.18
  */
 #define MBIM_UUID_MS_BASIC_CONNECT_EXTENSIONS mbim_uuid_from_service (MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS)
+
+/**
+ * MBIM_UUID_MS_UICC_LOW_LEVEL_ACCESS:
+ *
+ * Get the UUID of the %MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS service.
+ *
+ * Returns: (transfer none): a #MbimUuid.
+ *
+ * Since: 1.26
+ */
+#define MBIM_UUID_MS_UICC_LOW_LEVEL_ACCESS mbim_uuid_from_service (MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS)
+
+/**
+ * MBIM_UUID_QUECTEL:
+ *
+ * Get the UUID of the %MBIM_SERVICE_QUECTEL service.
+ *
+ * Returns: (transfer none): a #MbimUuid.
+ *
+ * Since: 1.26.2
+ */
+#define MBIM_UUID_QUECTEL mbim_uuid_from_service (MBIM_SERVICE_QUECTEL)
+
+/**
+ * MBIM_UUID_INTEL_THERMAL_RF:
+ *
+ * Get the UUID of the %MBIM_SERVICE_INTEL_THERMAL_RF service.
+ *
+ * Returns: (transfer none): a #MbimUuid.
+ *
+ * Since: 1.28
+ */
+#define MBIM_UUID_INTEL_THERMAL_RF mbim_uuid_from_service (MBIM_SERVICE_INTEL_THERMAL_RF)
+
+/**
+ * MBIM_UUID_MS_VOICE_EXTENSIONS:
+ *
+ * Get the UUID of the %MBIM_SERVICE_MS_VOICE_EXTENSIONS service.
+ *
+ * Returns: (transfer none): a #MbimUuid.
+ *
+ * Since: 1.28
+ */
+#define MBIM_UUID_MS_VOICE_EXTENSIONS mbim_uuid_from_service (MBIM_SERVICE_MS_VOICE_EXTENSIONS)
+
+/**
+ * MBIM_UUID_INTEL_MUTUAL_AUTHENTICATION:
+ *
+ * Get the UUID of the %MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION service.
+ *
+ * Returns: (transfer none): a #MbimUuid.
+ *
+ * Since: 1.30
+ */
+#define MBIM_UUID_INTEL_MUTUAL_AUTHENTICATION mbim_uuid_from_service (MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION)
+
+/**
+ * MBIM_UUID_INTEL_TOOLS:
+ *
+ * Get the UUID of the %MBIM_SERVICE_INTEL_TOOLS service.
+ *
+ * Returns: (transfer none): a #MbimUuid.
+ *
+ * Since: 1.30
+ */
+#define MBIM_UUID_INTEL_TOOLS mbim_uuid_from_service (MBIM_SERVICE_INTEL_TOOLS)
+
+/**
+ * MBIM_UUID_GOOGLE:
+ *
+ * Get the UUID of the %MBIM_SERVICE_GOOGLE service.
+ *
+ * Returns: (transfer none): a #MbimUuid.
+ *
+ * Since: 1.30
+ */
+#define MBIM_UUID_GOOGLE mbim_uuid_from_service (MBIM_SERVICE_GOOGLE)
 
 /**
  * mbim_service_lookup_name:
@@ -400,30 +503,50 @@ MbimService mbim_uuid_to_service (const MbimUuid *uuid);
  * MbimContextType:
  * @MBIM_CONTEXT_TYPE_INVALID: Invalid context type.
  * @MBIM_CONTEXT_TYPE_NONE: Context not yet provisioned.
- * @MBIM_CONTEXT_TYPE_INTERNET: Connection to the Internet.
- * @MBIM_CONTEXT_TYPE_VPN: Connection to a VPN.
- * @MBIM_CONTEXT_TYPE_VOICE: Connection to a VoIP service.
- * @MBIM_CONTEXT_TYPE_VIDEO_SHARE: Connection to a video sharing service.
- * @MBIM_CONTEXT_TYPE_PURCHASE: Connection to an over-the-air activation site.
- * @MBIM_CONTEXT_TYPE_IMS: Connection to IMS.
- * @MBIM_CONTEXT_TYPE_MMS: Connection to MMS.
- * @MBIM_CONTEXT_TYPE_LOCAL: A local.
+ * @MBIM_CONTEXT_TYPE_INTERNET: Context representing a connection to the
+ *  Internet.
+ * @MBIM_CONTEXT_TYPE_VPN: Context representing a connection to a a private
+ *  network (e.g. VPN to a corporate network).
+ * @MBIM_CONTEXT_TYPE_VOICE: Context representing a connection to a VoIP service.
+ * @MBIM_CONTEXT_TYPE_VIDEO_SHARE: Context representing a connection to a video
+ *  sharing service.
+ * @MBIM_CONTEXT_TYPE_PURCHASE: Context representing a connection to an
+ *  OTA (over-the-air) activation site.
+ * @MBIM_CONTEXT_TYPE_IMS: Context representing a connection to IMS.
+ * @MBIM_CONTEXT_TYPE_MMS: Context representing a connection to MMS.
+ * @MBIM_CONTEXT_TYPE_LOCAL: Context representing a connection which is
+ *  terminated at the device. No IP traffic sent over the air.
+ * @MBIM_CONTEXT_TYPE_ADMIN: Context used for administrative purposes, such as
+ *  device management (MS MBIMEx). Since 1.28.
+ * @MBIM_CONTEXT_TYPE_APP: Context used for certain applications allowed by
+ *  mobile operators (MS MBIMEx). Since 1.28.
+ * @MBIM_CONTEXT_TYPE_XCAP: Context used for XCAP provisioning on IMS services
+ *  (MS MBIMEx). Since 1.28.
+ * @MBIM_CONTEXT_TYPE_TETHERING: Context used for mobile hotspot tethering
+ *  (MS MBIMEx). Since 1.28.
+ * @MBIM_CONTEXT_TYPE_EMERGENCY_CALLING: Context used for IMS emergency calling
+ *  (MS MBIMEx). Since 1.28.
  *
  * Enumeration of the generic MBIM context types.
  *
  * Since: 1.0
  */
 typedef enum { /*< since=1.0 >*/
-    MBIM_CONTEXT_TYPE_INVALID     = 0,
-    MBIM_CONTEXT_TYPE_NONE        = 1,
-    MBIM_CONTEXT_TYPE_INTERNET    = 2,
-    MBIM_CONTEXT_TYPE_VPN         = 3,
-    MBIM_CONTEXT_TYPE_VOICE       = 4,
-    MBIM_CONTEXT_TYPE_VIDEO_SHARE = 5,
-    MBIM_CONTEXT_TYPE_PURCHASE    = 6,
-    MBIM_CONTEXT_TYPE_IMS         = 7,
-    MBIM_CONTEXT_TYPE_MMS         = 8,
-    MBIM_CONTEXT_TYPE_LOCAL       = 9,
+    MBIM_CONTEXT_TYPE_INVALID           = 0,
+    MBIM_CONTEXT_TYPE_NONE              = 1,
+    MBIM_CONTEXT_TYPE_INTERNET          = 2,
+    MBIM_CONTEXT_TYPE_VPN               = 3,
+    MBIM_CONTEXT_TYPE_VOICE             = 4,
+    MBIM_CONTEXT_TYPE_VIDEO_SHARE       = 5,
+    MBIM_CONTEXT_TYPE_PURCHASE          = 6,
+    MBIM_CONTEXT_TYPE_IMS               = 7,
+    MBIM_CONTEXT_TYPE_MMS               = 8,
+    MBIM_CONTEXT_TYPE_LOCAL             = 9,
+    MBIM_CONTEXT_TYPE_ADMIN             = 10,
+    MBIM_CONTEXT_TYPE_APP               = 11,
+    MBIM_CONTEXT_TYPE_XCAP              = 12,
+    MBIM_CONTEXT_TYPE_TETHERING         = 13,
+    MBIM_CONTEXT_TYPE_EMERGENCY_CALLING = 14,
 } MbimContextType;
 
 /**

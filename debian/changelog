@@ -1,3 +1,120 @@
+libmbim (1.30.0-1) unstable; urgency=medium
+
+  * New upstream version 1.30.0
+  * d/clean: clean up python compiled bytecode files (Closes: #1046871)
+  * libmbim-glib4: update symbols file for new upstream release
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Fri, 20 Oct 2023 12:49:46 +0200
+
+libmbim (1.28.4-2) unstable; urgency=medium
+
+  * Release to unstable
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Tue, 13 Jun 2023 16:35:22 +0200
+
+libmbim (1.28.4-1) experimental; urgency=medium
+
+  * New upstream version 1.28.4
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Sun, 23 Apr 2023 15:46:04 +0200
+
+libmbim (1.28.2-1) unstable; urgency=medium
+
+  * d/watch: only watch for stable releases
+    `libmbim` has a x.y.z version numbering scheme where y is even for
+    stable releases and odd for development ones. Stable release candidates
+    have x.y-rcz version numbers with y being an even number. This change
+    ensures we only watch for stable releases, including RCs.
+  * New upstream version 1.28.2
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Mon, 19 Dec 2022 11:48:42 +0100
+
+libmbim (1.28.0-1) unstable; urgency=medium
+
+  * New upstream version 1.28.0
+  * d/watch: look for git tags instead of source tarballs.
+    Upstream stopped publishing source tarballs and now requests that we
+    use (signed) git tags for new versions. Take this opportunity to update
+    the upstream signing key.
+  * d/rules: adapt to upstream build system change.
+    Upstream switched from `autotools` to `meson`. As a consequence,
+    configure options are handled differently, so let's adapt to those
+    changes.
+    Note: introspection is now enabled by default, so we don't need to
+    explicitly enable it anymore.
+  * d/control: update build dependencies
+    `meson` is now the only build system supported for this package, which
+    now also depends on `bash-completion` at build time. While at it,
+    update my email and bump Standards-Version as no other change is
+    required.
+  * libmbim-glib4: update symbols file for new upstream release
+  * debian: update lintian overrides
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Fri, 28 Oct 2022 14:25:12 +0200
+
+libmbim (1.26.4-1) unstable; urgency=medium
+
+  * debian: lintian-driven fixes and small improvements.
+    This commit includes minor changes spotted by `lintian-brush`:
+    - `d/copyright`: use `https` for the file format spec URL
+    - `d/upstream/metadata`: append `.git` to repo URL
+    - `d/rules`: drop symbols migration (1.12 is long gone)
+  * New upstream version 1.26.4
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Thu, 19 May 2022 19:21:56 +0200
+
+libmbim (1.26.2-1) unstable; urgency=medium
+
+  * New upstream version 1.26.2
+  * d/control: avoid duplicate build dependencies and sort list
+    `gtk-doc-tools` was added to `Build-Depends` in order to fix build with
+    latest autotools, but it was pulled in unconditionally and left in
+    `Build-Depends-Indep`. This commit makes sure we avoid duplicates and
+    don't need `gtk-doc-tools` when building with the `nodoc` profile.
+    We also took the opportunity to sort build dependencies by alphabetical
+    order for better readability.
+  * d/libmbim-glib4: update symbols file for new version
+  * debian: update lintian-overrides.
+    Due to a change in how `lintian` reports issues, the `libmbim-glib4`
+    overrides were ignored. This commit updates the corresponding file in
+    order to fix that and adds a new override for `libmbim-glib-doc`:
+    installing documentation to `/usr/share/gtk-doc` instead of
+    `/usr/share/doc` is the standard practice for glib/gtk-based software.
+  * d/rules: drop --fail-missing option for dh_missing.
+    This is now the default with dh-compat level 13.
+
+ -- Arnaud Ferraris <arnaud.ferraris@collabora.com>  Tue, 07 Dec 2021 13:47:25 +0100
+
+libmbim (1.26.0-2) unstable; urgency=medium
+
+  * d/control: build-depend on gtk-doc-tools.
+
+ -- Arnaud Ferraris <arnaud.ferraris@collabora.com>  Mon, 06 Dec 2021 17:24:36 +0100
+
+libmbim (1.26.0-1) unstable; urgency=medium
+
+  * New upstream version 1.26.0
+  * d/control: change maintainer to DebianOnMobile team.
+  * d/control: bump debhelper-compat version and Standards-Version.
+  * d/copyright: add Upstream-Contact and update maintainer email
+  * d/copyright: fix libmbim-glib path
+  * debian: add salsa CI pipeline
+  * d/source: add upstream metadata
+  * d/control: update build dependencies.
+  * d/libmbim-glib4: update symbols file for new version
+  * d/watch: bump watch file version, no change required
+  * d/rules: add hardening build options
+  * d/changelog: prepare new release
+  * d/control: add more Uploaders.
+
+ -- Arnaud Ferraris <arnaud.ferraris@collabora.com>  Thu, 04 Nov 2021 17:16:51 +0100
+
+libmbim (1.24.8-1) experimental; urgency=medium
+
+  * New upstream version
+
+ -- Sebastien Bacher <seb128@ubuntu.com>  Tue, 22 Jun 2021 12:18:09 +0200
+
 libmbim (1.24.6-0.1) unstable; urgency=medium
 
   * Non-maintainer upload.

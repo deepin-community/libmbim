@@ -1,24 +1,10 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
- *
  * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2022 Intel Corporation
  */
 
 #include "mbim-cid.h"
@@ -128,9 +114,17 @@ static const CidConfig cid_ms_host_shutdown_config [MBIM_CID_MS_HOST_SHUTDOWN_LA
 };
 
 /* Note: index of the array is CID-1 */
-#define MBIM_CID_PROXY_CONTROL_LAST MBIM_CID_PROXY_CONTROL_CONFIGURATION
+#define MBIM_CID_MS_SAR_LAST MBIM_CID_MS_SAR_TRANSMISSION_STATUS
+static const CidConfig cid_ms_sar_config [MBIM_CID_MS_SAR_LAST] = {
+    { SET, QUERY, NOTIFY }, /* MBIM_CID_MS_SAR_CONFIG */
+    { SET, QUERY, NOTIFY }, /* MBIM_CID_MS_SAR_TRANSMISSION_STATUS */
+};
+
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_PROXY_CONTROL_LAST MBIM_CID_PROXY_CONTROL_VERSION
 static const CidConfig cid_proxy_control_config [MBIM_CID_PROXY_CONTROL_LAST] = {
-    { SET, NO_QUERY, NO_NOTIFY }, /* MBIM_CID_PROXY_CONTROL_CONFIGURATION */
+    { SET,    NO_QUERY, NO_NOTIFY }, /* MBIM_CID_PROXY_CONTROL_CONFIGURATION */
+    { NO_SET, NO_QUERY, NOTIFY    }, /* MBIM_CID_PROXY_CONTROL_VERSION */
 };
 
 /* Note: index of the array is CID-1 */
@@ -156,10 +150,10 @@ static const CidConfig cid_intel_firmware_update_config [MBIM_CID_INTEL_FIRMWARE
 };
 
 /* Note: index of the array is CID-1 */
-#define MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LAST MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_DEVICE_RESET
+#define MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LAST MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_REGISTRATION_PARAMETERS
 static const CidConfig cid_ms_basic_connect_extensions_config [MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LAST] = {
     { SET,    QUERY,    NOTIFY    }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_PROVISIONED_CONTEXTS */
-    { SET,    QUERY,    NOTIFY    }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_NETWORK_BLACKLIST */
+    { SET,    QUERY,    NOTIFY    }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_NETWORK_DENYLIST */
     { SET,    QUERY,    NOTIFY    }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LTE_ATTACH_CONFIG */
     { SET,    QUERY,    NOTIFY    }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LTE_ATTACH_STATUS */
     { NO_SET, QUERY,    NO_NOTIFY }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_SYS_CAPS */
@@ -168,7 +162,98 @@ static const CidConfig cid_ms_basic_connect_extensions_config [MBIM_CID_MS_BASIC
     { NO_SET, QUERY,    NOTIFY    }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_SLOT_INFO_STATUS */
     { NO_SET, QUERY,    NOTIFY    }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_PCO */
     { SET,    NO_QUERY, NO_NOTIFY }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_DEVICE_RESET */
+    { NO_SET, QUERY,    NO_NOTIFY }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_BASE_STATIONS_INFO */
+    { NO_SET, QUERY,    NOTIFY    }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_LOCATION_INFO_STATUS */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, QUERY,    NO_NOTIFY }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_VERSION */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_REGISTRATION_PARAMETERS */
 };
+
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_QDU_LAST MBIM_CID_QDU_FILE_WRITE
+static const CidConfig cid_qdu_config [MBIM_CID_QDU_LAST] = {
+    { SET,    QUERY,    NOTIFY    }, /* MBIM_CID_QDU_UPDATE_SESSION */
+    { SET,    NO_QUERY, NO_NOTIFY }, /* MBIM_CID_QDU_FILE_OPEN */
+    { SET,    NO_QUERY, NO_NOTIFY }, /* MBIM_CID_QDU_FILE_WRITE */
+};
+
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_LAST MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_READ_RECORD
+static const CidConfig cid_ms_uicc_low_level_access_config [MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_LAST] = {
+    { NO_SET,    QUERY,    NO_NOTIFY    }, /* MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_ATR */
+    { SET,    NO_QUERY,    NO_NOTIFY    }, /* MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_OPEN_CHANNEL */
+    { SET,    NO_QUERY,    NO_NOTIFY    }, /* MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_CLOSE_CHANNEL */
+    { SET,    NO_QUERY,    NO_NOTIFY    }, /* MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_APDU */
+    { SET,       QUERY,    NO_NOTIFY    }, /* MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_TERMINAL_CAPABILITY */
+    { SET,       QUERY,    NO_NOTIFY    }, /* MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_RESET */
+    { NO_SET,    QUERY,    NO_NOTIFY    }, /* MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_APPLICATION_LIST */
+    { NO_SET,    QUERY,    NO_NOTIFY    }, /* MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_FILE_STATUS */
+    { SET,       QUERY,    NO_NOTIFY    }, /* MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_READ_BINARY */
+    { SET,       QUERY,    NO_NOTIFY    }, /* MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_READ_RECORD */
+};
+
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_QUECTEL_LAST MBIM_CID_QUECTEL_RADIO_STATE
+static const CidConfig cid_quectel_config [MBIM_CID_QUECTEL_LAST] = {
+    { NO_SET, QUERY, NO_NOTIFY }, /* MBIM_CID_QUECTEL_RADIO_STATE */
+};
+
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_INTEL_THERMAL_RF_LAST MBIM_CID_INTEL_THERMAL_RF_RFIM
+static const CidConfig cid_intel_thermal_rf_config [MBIM_CID_INTEL_THERMAL_RF_LAST] = {
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { SET,       QUERY, NOTIFY    }, /* MBIM_CID_INTEL_THERMAL_RF_RFIM */
+};
+
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_MS_VOICE_EXTENSIONS_LAST MBIM_CID_MS_VOICE_EXTENSIONS_NITZ
+static const CidConfig cid_ms_voice_extensions_config [MBIM_CID_MS_VOICE_EXTENSIONS_LAST] = {
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET,    QUERY,    NOTIFY }, /* MBIM_CID_MS_VOICE_EXTENSIONS_NITZ */
+};
+
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_INTEL_MUTUAL_AUTHENTICATION_LAST MBIM_CID_INTEL_MUTUAL_AUTHENTICATION_FCC_LOCK
+static const CidConfig cid_intel_mutual_authentication_config [MBIM_CID_INTEL_MUTUAL_AUTHENTICATION_LAST] = {
+    { SET, QUERY, NO_NOTIFY }, /* MBIM_CID_INTEL_MUTUAL_AUTHENTICATION_FCC_LOCK */
+};
+
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_INTEL_TOOLS_LAST MBIM_CID_INTEL_TOOLS_TRACE_CONFIG
+static const CidConfig cid_intel_tools_config [MBIM_CID_INTEL_TOOLS_LAST] = {
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { NO_SET, NO_QUERY, NO_NOTIFY }, /* Unused */
+    { SET   , QUERY   , NO_NOTIFY }, /* MBIM_CID_INTEL_TOOLS_TRACE_CONFIG */
+};
+
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_GOOGLE_LAST MBIM_CID_GOOGLE_CARRIER_LOCK
+static const CidConfig cid_google_config [MBIM_CID_GOOGLE_LAST] = {
+    { SET, QUERY, NOTIFY }, /* MBIM_CID_GOOGLE_CARRIER_LOCK */
+};
+
 
 gboolean
 mbim_cid_can_set (MbimService service,
@@ -199,6 +284,8 @@ mbim_cid_can_set (MbimService service,
         return cid_ms_firmware_id_config[cid - 1].set;
     case MBIM_SERVICE_MS_HOST_SHUTDOWN:
         return cid_ms_host_shutdown_config[cid - 1].set;
+    case MBIM_SERVICE_MS_SAR:
+        return cid_ms_sar_config[cid - 1].set;
     case MBIM_SERVICE_PROXY_CONTROL:
         return cid_proxy_control_config[cid - 1].set;
     case MBIM_SERVICE_QMI:
@@ -207,8 +294,24 @@ mbim_cid_can_set (MbimService service,
         return cid_atds_config[cid - 1].set;
     case MBIM_SERVICE_INTEL_FIRMWARE_UPDATE:
         return cid_intel_firmware_update_config[cid - 1].set;
+    case MBIM_SERVICE_QDU:
+        return cid_qdu_config[cid - 1].set;
     case MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS:
         return cid_ms_basic_connect_extensions_config[cid - 1].set;
+    case MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS:
+        return cid_ms_uicc_low_level_access_config[cid - 1].set;
+    case MBIM_SERVICE_QUECTEL:
+        return cid_quectel_config[cid - 1].set;
+    case MBIM_SERVICE_INTEL_THERMAL_RF:
+        return cid_intel_thermal_rf_config[cid - 1].set;
+    case MBIM_SERVICE_MS_VOICE_EXTENSIONS:
+        return cid_ms_voice_extensions_config[cid - 1].set;
+    case MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION:
+        return cid_intel_mutual_authentication_config[cid - 1].set;
+    case MBIM_SERVICE_INTEL_TOOLS:
+        return cid_intel_tools_config[cid - 1].set;
+    case MBIM_SERVICE_GOOGLE:
+        return cid_google_config[cid - 1].set;
     case MBIM_SERVICE_INVALID:
     case MBIM_SERVICE_LAST:
     default:
@@ -246,6 +349,8 @@ mbim_cid_can_query (MbimService service,
         return cid_ms_firmware_id_config[cid - 1].query;
     case MBIM_SERVICE_MS_HOST_SHUTDOWN:
         return cid_ms_host_shutdown_config[cid - 1].query;
+    case MBIM_SERVICE_MS_SAR:
+        return cid_ms_sar_config[cid - 1].query;
     case MBIM_SERVICE_PROXY_CONTROL:
         return cid_proxy_control_config[cid - 1].query;
     case MBIM_SERVICE_QMI:
@@ -254,8 +359,24 @@ mbim_cid_can_query (MbimService service,
         return cid_atds_config[cid - 1].query;
     case MBIM_SERVICE_INTEL_FIRMWARE_UPDATE:
         return cid_intel_firmware_update_config[cid - 1].query;
+    case MBIM_SERVICE_QDU:
+        return cid_qdu_config[cid - 1].query;
     case MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS:
         return cid_ms_basic_connect_extensions_config[cid - 1].query;
+    case MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS:
+        return cid_ms_uicc_low_level_access_config[cid - 1].query;
+    case MBIM_SERVICE_QUECTEL:
+        return cid_quectel_config[cid - 1].query;
+    case MBIM_SERVICE_INTEL_THERMAL_RF:
+        return cid_intel_thermal_rf_config[cid - 1].query;
+    case MBIM_SERVICE_MS_VOICE_EXTENSIONS:
+        return cid_ms_voice_extensions_config[cid - 1].query;
+    case MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION:
+        return cid_intel_mutual_authentication_config[cid - 1].query;
+    case MBIM_SERVICE_INTEL_TOOLS:
+        return cid_intel_tools_config[cid - 1].query;
+    case MBIM_SERVICE_GOOGLE:
+        return cid_google_config[cid - 1].query;
     case MBIM_SERVICE_INVALID:
     case MBIM_SERVICE_LAST:
     default:
@@ -293,6 +414,8 @@ mbim_cid_can_notify (MbimService service,
         return cid_ms_firmware_id_config[cid - 1].notify;
     case MBIM_SERVICE_MS_HOST_SHUTDOWN:
         return cid_ms_host_shutdown_config[cid - 1].notify;
+    case MBIM_SERVICE_MS_SAR:
+        return cid_ms_sar_config[cid - 1].notify;
     case MBIM_SERVICE_PROXY_CONTROL:
         return cid_proxy_control_config[cid - 1].notify;
     case MBIM_SERVICE_QMI:
@@ -301,8 +424,24 @@ mbim_cid_can_notify (MbimService service,
         return cid_atds_config[cid - 1].notify;
     case MBIM_SERVICE_INTEL_FIRMWARE_UPDATE:
         return cid_intel_firmware_update_config[cid - 1].notify;
+    case MBIM_SERVICE_QDU:
+        return cid_qdu_config[cid - 1].notify;
     case MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS:
         return cid_ms_basic_connect_extensions_config[cid - 1].notify;
+    case MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS:
+        return cid_ms_uicc_low_level_access_config[cid - 1].notify;
+    case MBIM_SERVICE_QUECTEL:
+        return cid_quectel_config[cid - 1].notify;
+    case MBIM_SERVICE_INTEL_THERMAL_RF:
+        return cid_intel_thermal_rf_config[cid - 1].notify;
+    case MBIM_SERVICE_MS_VOICE_EXTENSIONS:
+        return cid_ms_voice_extensions_config[cid - 1].notify;
+    case MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION:
+        return cid_intel_mutual_authentication_config[cid - 1].notify;
+    case MBIM_SERVICE_INTEL_TOOLS:
+        return cid_intel_tools_config[cid - 1].notify;
+    case MBIM_SERVICE_GOOGLE:
+        return cid_google_config[cid - 1].notify;
     case MBIM_SERVICE_INVALID:
     case MBIM_SERVICE_LAST:
     default:
@@ -341,6 +480,8 @@ mbim_cid_get_printable (MbimService service,
         return mbim_cid_ms_firmware_id_get_string (cid);
     case MBIM_SERVICE_MS_HOST_SHUTDOWN:
         return mbim_cid_ms_host_shutdown_get_string (cid);
+    case MBIM_SERVICE_MS_SAR:
+        return mbim_cid_ms_sar_get_string (cid);
     case MBIM_SERVICE_PROXY_CONTROL:
         return mbim_cid_proxy_control_get_string (cid);
     case MBIM_SERVICE_QMI:
@@ -349,8 +490,24 @@ mbim_cid_get_printable (MbimService service,
         return mbim_cid_atds_get_string (cid);
     case MBIM_SERVICE_INTEL_FIRMWARE_UPDATE:
         return mbim_cid_intel_firmware_update_get_string (cid);
+    case MBIM_SERVICE_QDU:
+        return mbim_cid_qdu_get_string (cid);
     case MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS:
         return mbim_cid_ms_basic_connect_extensions_get_string (cid);
+    case MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS:
+        return mbim_cid_ms_uicc_low_level_access_get_string (cid);
+    case MBIM_SERVICE_QUECTEL:
+        return mbim_cid_quectel_get_string (cid);
+    case MBIM_SERVICE_INTEL_THERMAL_RF:
+        return mbim_cid_intel_thermal_rf_get_string (cid);
+    case MBIM_SERVICE_MS_VOICE_EXTENSIONS:
+        return mbim_cid_ms_voice_extensions_get_string (cid);
+    case MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION:
+        return mbim_cid_intel_mutual_authentication_get_string (cid);
+    case MBIM_SERVICE_INTEL_TOOLS:
+        return mbim_cid_intel_tools_get_string (cid);
+    case MBIM_SERVICE_GOOGLE:
+        return mbim_cid_google_get_string (cid);
     case MBIM_SERVICE_LAST:
     default:
         g_assert_not_reached ();

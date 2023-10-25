@@ -1,18 +1,6 @@
 # -*- Mode: python; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
 #
-# This program is free software; you can redistribute it and/or modify it under
-# the terms of the GNU Lesser General Public License as published by the Free
-# Software Foundation; either version 2 of the License, or (at your option) any
-# later version.
-#
-# This program is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-# FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more
-# details.
-#
-# You should have received a copy of the GNU Lesser General Public License along
-# with this program; if not, write to the Free Software Foundation, Inc., 51
-# Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # Copyright (C) 2012 Lanedo GmbH
 # Copyright (C) 2013 - 2018 Aleksander Morgado <aleksander@aleksander.es>
@@ -31,22 +19,8 @@ def add_copyright(f):
         "\n"
         "/* GENERATED CODE... DO NOT EDIT */\n"
         "\n"
+        "/* SPDX-License-Identifier: LGPL-2.1-or-later */\n"
         "/*\n"
-        " * This library is free software; you can redistribute it and/or\n"
-        " * modify it under the terms of the GNU Lesser General Public\n"
-        " * License as published by the Free Software Foundation; either\n"
-        " * version 2 of the License, or (at your option) any later version.\n"
-        " *\n"
-        " * This library is distributed in the hope that it will be useful,\n"
-        " * but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
-        " * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU\n"
-        " * Lesser General Public License for more details.\n"
-        " *\n"
-        " * You should have received a copy of the GNU Lesser General Public\n"
-        " * License along with this library; if not, write to the\n"
-        " * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,\n"
-        " * Boston, MA 02110-1301 USA.\n"
-        " *\n"
         " * Copyright (C) 2013 - 2018 Aleksander Morgado <aleksander@aleksander.es>\n"
         " */\n"
         "\n");
@@ -62,7 +36,7 @@ def build_header_guard(output_name):
 Write the common header start chunk
 """
 def add_header_start(f, output_name):
-    translations = { 'guard'   : build_header_guard(output_name) }
+    translations = { 'guard' : build_header_guard(output_name) }
     template = (
         "\n"
         "#include <glib.h>\n"
@@ -72,11 +46,31 @@ def add_header_start(f, output_name):
         "#include \"mbim-message.h\"\n"
         "#include \"mbim-device.h\"\n"
         "#include \"mbim-enums.h\"\n"
+        "#include \"mbim-tlv.h\"\n"
         "\n"
         "#ifndef ${guard}\n"
         "#define ${guard}\n"
         "\n"
         "G_BEGIN_DECLS\n")
+    f.write(string.Template(template).substitute(translations))
+
+
+"""
+Write the header documentation sections
+"""
+def add_header_sections(f, input_name):
+    translations = { 'section_name' : "mbim-" + remove_prefix(input_name,"mbim-service-"),
+                     'service_name' : string.capwords(remove_prefix(input_name,"mbim-service-").replace('-', ' ')) }
+    template = (
+        "\n"
+        "/**\n"
+        " * SECTION:${section_name}\n"
+        " * @title: ${service_name} service\n"
+        " * @short_description: Support for the ${service_name} service.\n"
+        " *\n"
+        " * This section implements support for requests, responses and notifications in the\n"
+        " * ${service_name} service.\n"
+        " */\n")
     f.write(string.Template(template).substitute(translations))
 
 
@@ -102,7 +96,9 @@ def add_source_start(f, output_name):
         "\n"
         "#include \"${name}.h\"\n"
         "#include \"mbim-message-private.h\"\n"
+        "#include \"mbim-tlv-private.h\"\n"
         "#include \"mbim-enum-types.h\"\n"
+        "#include \"mbim-flag-types.h\"\n"
         "#include \"mbim-error-types.h\"\n"
         "#include \"mbim-device.h\"\n"
         "#include \"mbim-utils.h\"\n")

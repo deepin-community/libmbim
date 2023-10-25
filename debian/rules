@@ -1,29 +1,22 @@
 #!/usr/bin/make -f
 
 export DPKG_GENSYMBOLS_CHECK_LEVEL=4
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
 %:
 	dh $@ --with gir
 
 ifeq ($(filter libmbim-glib-doc,$(shell dh_listpackages)),)
-configure_flags += --disable-gtk-doc --disable-gtk-doc-html
+configure_flags += -Dgtk_doc=false
 else
-configure_flags += --enable-gtk-doc --enable-gtk-doc-html
-endif
-
-ifneq ($(filter linux,$(DEB_HOST_ARCH_OS)),)
-configure_flags += --with-udev
-else
-configure_flags += --without-udev
+configure_flags += -Dgtk_doc=true
 endif
 
 override_dh_auto_configure:
-	dh_auto_configure -- --enable-introspection=yes $(configure_flags)
+	dh_auto_configure -- -Ddefault_library=both $(configure_flags)
 
 override_dh_missing:
-	dh_missing -X.la --fail-missing
-
-override_dh_strip:
-	dh_strip --dbgsym-migration='libmbim-glib4-dbg (<< 1.12.4-1~)'
+	dh_missing -X.la
 
 override_dh_installexamples:
 	dh_installexamples -XMakefile

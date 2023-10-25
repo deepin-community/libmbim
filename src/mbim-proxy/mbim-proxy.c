@@ -1,21 +1,9 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * mbim-proxy -- A proxy to communicate with MBIM ports
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- * Copyright (C) 2014 Aleksander Morgado <aleksander@gnu.org>
+ * Copyright (C) 2014-2023 Aleksander Morgado <aleksander@aleksander.es>
  * Copyright (C) 2014 Smith Micro Software, Inc.
  */
 
@@ -46,6 +34,7 @@ static guint client_connected_once = FALSE;
 
 /* Main options */
 static gboolean verbose_flag;
+static gboolean verbose_full_flag;
 static gboolean version_flag;
 static gboolean no_exit_flag;
 static gint     empty_timeout = -1;
@@ -63,11 +52,15 @@ static GOptionEntry main_entries[] = {
       "Run action with verbose logs, including the debug ones",
       NULL
     },
+    { "verbose-full", 'v', 0, G_OPTION_ARG_NONE, &verbose_full_flag,
+      "Run action with verbose logs, including the debug ones and personal info",
+      NULL
+    },
     { "version", 'V', 0, G_OPTION_ARG_NONE, &version_flag,
       "Print version",
       NULL
     },
-    { NULL }
+    { NULL, 0, 0, 0, NULL, NULL, NULL }
 };
 
 static gboolean
@@ -82,21 +75,16 @@ quit_cb (gpointer user_data)
 }
 
 static void
-log_handler (const gchar *log_domain,
-             GLogLevelFlags log_level,
-             const gchar *message,
-             gpointer user_data)
+log_handler (const gchar    *log_domain,
+             GLogLevelFlags  log_level,
+             const gchar    *message,
+             gpointer        user_data)
 {
     const gchar *log_level_str;
-    time_t now;
-    gchar time_str[64];
-    struct tm *local_time;
-    gboolean err;
-
-    now = time ((time_t *) NULL);
-    local_time = localtime (&now);
-    strftime (time_str, 64, "%d %b %Y, %H:%M:%S", local_time);
-    err = FALSE;
+    time_t       now;
+    gchar        time_str[64];
+    struct tm   *local_time;
+    gboolean     err = FALSE;
 
     switch (log_level) {
     case G_LOG_LEVEL_WARNING:
@@ -126,8 +114,12 @@ log_handler (const gchar *log_domain,
         g_assert_not_reached ();
     }
 
-    if (!verbose_flag && !err)
+    if (!verbose_flag && !verbose_full_flag && !err)
         return;
+
+    now = time ((time_t *) NULL);
+    local_time = localtime (&now);
+    strftime (time_str, 64, "%d %b %Y, %H:%M:%S", local_time);
 
     g_fprintf (err ? stderr : stdout,
                "[%s] %s %s\n",
@@ -142,7 +134,7 @@ print_version_and_exit (void)
 {
     g_print ("\n"
              PROGRAM_NAME " " PROGRAM_VERSION "\n"
-             "Copyright (C) 2013-2020 Aleksander Morgado\n"
+             "Copyright (C) 2013-2023 Aleksander Morgado\n"
              "Copyright (C) 2014-2018 Greg Suarez\n"
              "License GPLv2+: GNU GPL version 2 or later <http://gnu.org/licenses/gpl-2.0.html>\n"
              "This is free software: you are free to change and redistribute it.\n"
@@ -228,8 +220,16 @@ int main (int argc, char **argv)
 
     g_log_set_handler (NULL,  G_LOG_LEVEL_MASK, log_handler, NULL);
     g_log_set_handler ("Mbim", G_LOG_LEVEL_MASK, log_handler, NULL);
-    if (verbose_flag)
+    if (verbose_flag && verbose_full_flag) {
+        g_printerr ("error: cannot specify --verbose and --verbose-full at the same time\n");
+        exit (EXIT_FAILURE);
+    } else if (verbose_flag) {
         mbim_utils_set_traces_enabled (TRUE);
+        mbim_utils_set_show_personal_info (FALSE);
+    } else if (verbose_full_flag) {
+        mbim_utils_set_traces_enabled (TRUE);
+        mbim_utils_set_show_personal_info (TRUE);
+    }
 
     /* Setup signals */
     g_unix_signal_add (SIGINT,  quit_cb, NULL);

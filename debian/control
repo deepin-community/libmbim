@@ -1,21 +1,25 @@
 Source: libmbim
 Section: libs
 Priority: optional
-Maintainer: Mathieu Trudel-Lapierre <cyphermox@ubuntu.com>
-Build-Depends: debhelper-compat (= 12),
-               pkg-config,
-               autoconf-archive,
+Maintainer: DebianOnMobile Maintainers <debian-on-mobile-maintainers@alioth-lists.debian.net>
+Uploaders: Arnaud Ferraris <aferraris@debian.org>,
+           Guido Günther <agx@sigxcpu.org>,
+           Henry-Nicolas Tourneur <debian@nilux.be>,
+           Martin <debacle@debian.org>
+Build-Depends: debhelper-compat (= 13),
+               bash-completion,
                gobject-introspection,
+               gtk-doc-tools <!nodoc>,
                help2man,
                libgirepository1.0-dev,
-               libglib2.0-dev (>= 2.36),
-               libgudev-1.0-dev (>= 147)[linux-any],
-Build-Depends-Indep: gtk-doc-tools <!nodoc>,
-                     libglib2.0-doc <!nodoc>
-Standards-Version: 4.5.0
+               libglib2.0-dev (>= 2.56),
+               meson,
+               pkg-config,
+Build-Depends-Indep: libglib2.0-doc <!nodoc>
+Standards-Version: 4.6.1
 Rules-Requires-Root: no
-Vcs-Git: https://salsa.debian.org/debian/libmbim.git
-Vcs-Browser: https://salsa.debian.org/debian/libmbim
+Vcs-Git: https://salsa.debian.org/DebianOnMobile-team/libmbim.git
+Vcs-Browser: https://salsa.debian.org/DebianOnMobile-team/libmbim
 Homepage: https://www.freedesktop.org/wiki/Software/libmbim/
 
 Package: libmbim-glib4

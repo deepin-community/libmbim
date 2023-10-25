@@ -1,21 +1,10 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * mbimcli -- Command line interface to control MBIM devices
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
  * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2022 Intel Corporation
  */
 
 #include <glib.h>
@@ -29,39 +18,78 @@
 void mbimcli_async_operation_done (gboolean operation_status);
 
 /* Basic Connect group */
-GOptionGroup *mbimcli_basic_connect_get_option_group    (void);
-GOptionGroup *mbimcli_phonebook_get_option_group        (void);
-GOptionGroup *mbimcli_dss_get_option_group              (void);
-GOptionGroup *mbimcli_ms_firmware_id_get_option_group   (void);
-GOptionGroup *mbimcli_ms_host_shutdown_get_option_group (void);
-GOptionGroup *mbimcli_atds_get_option_group             (void);
-GOptionGroup *mbimcli_intel_firmware_update_get_option_group (void);
+GOptionGroup *mbimcli_basic_connect_get_option_group               (void);
+GOptionGroup *mbimcli_phonebook_get_option_group                   (void);
+GOptionGroup *mbimcli_dss_get_option_group                         (void);
+GOptionGroup *mbimcli_ms_firmware_id_get_option_group              (void);
+GOptionGroup *mbimcli_ms_host_shutdown_get_option_group            (void);
+GOptionGroup *mbimcli_ms_sar_get_option_group                      (void);
+GOptionGroup *mbimcli_atds_get_option_group                        (void);
+GOptionGroup *mbimcli_intel_firmware_update_get_option_group       (void);
 GOptionGroup *mbimcli_ms_basic_connect_extensions_get_option_group (void);
+GOptionGroup *mbimcli_quectel_get_option_group                     (void);
+GOptionGroup *mbimcli_intel_thermal_rf_get_option_group            (void);
+GOptionGroup *mbimcli_ms_voice_extensions_get_option_group         (void);
+GOptionGroup *mbimcli_ms_uicc_low_level_access_get_option_group    (void);
+GOptionGroup *mbimcli_intel_mutual_authentication_get_option_group (void);
+GOptionGroup *mbimcli_intel_tools_get_option_group                 (void);
+GOptionGroup *mbimcli_google_get_option_group                      (void);
 
-gboolean      mbimcli_basic_connect_options_enabled     (void);
-gboolean      mbimcli_phonebook_options_enabled         (void);
-gboolean      mbimcli_dss_options_enabled               (void);
-gboolean      mbimcli_ms_firmware_id_options_enabled    (void);
-gboolean      mbimcli_ms_host_shutdown_options_enabled  (void);
-gboolean      mbimcli_atds_options_enabled              (void);
-gboolean      mbimcli_intel_firmware_update_options_enabled (void);
+gboolean      mbimcli_basic_connect_options_enabled               (void);
+gboolean      mbimcli_phonebook_options_enabled                   (void);
+gboolean      mbimcli_dss_options_enabled                         (void);
+gboolean      mbimcli_ms_firmware_id_options_enabled              (void);
+gboolean      mbimcli_ms_host_shutdown_options_enabled            (void);
+gboolean      mbimcli_ms_sar_options_enabled                      (void);
+gboolean      mbimcli_atds_options_enabled                        (void);
+gboolean      mbimcli_intel_firmware_update_options_enabled       (void);
 gboolean      mbimcli_ms_basic_connect_extensions_options_enabled (void);
+gboolean      mbimcli_quectel_options_enabled                     (void);
+gboolean      mbimcli_intel_thermal_rf_options_enabled            (void);
+gboolean      mbimcli_ms_voice_extensions_options_enabled         (void);
+gboolean      mbimcli_ms_uicc_low_level_access_options_enabled    (void);
+gboolean      mbimcli_intel_mutual_authentication_options_enabled (void);
+gboolean      mbimcli_intel_tools_options_enabled                 (void);
+gboolean      mbimcli_google_options_enabled                      (void);
 
-void          mbimcli_basic_connect_run                 (MbimDevice *device,
+void          mbimcli_basic_connect_run                 (MbimDevice   *device,
                                                          GCancellable *cancellable);
-void          mbimcli_phonebook_run                     (MbimDevice *device,
+void          mbimcli_phonebook_run                     (MbimDevice   *device,
                                                          GCancellable *cancellable);
-void          mbimcli_dss_run                           (MbimDevice *device,
+void          mbimcli_dss_run                           (MbimDevice   *device,
                                                          GCancellable *cancellable);
-void          mbimcli_ms_firmware_id_run                (MbimDevice *device,
+void          mbimcli_ms_firmware_id_run                (MbimDevice   *device,
                                                          GCancellable *cancellable);
-void          mbimcli_ms_host_shutdown_run              (MbimDevice *device,
+void          mbimcli_ms_host_shutdown_run              (MbimDevice   *device,
                                                          GCancellable *cancellable);
-void          mbimcli_atds_run                          (MbimDevice *device,
+void          mbimcli_ms_sar_run                        (MbimDevice   *device,
                                                          GCancellable *cancellable);
-void          mbimcli_intel_firmware_update_run         (MbimDevice *device,
+void          mbimcli_atds_run                          (MbimDevice   *device,
                                                          GCancellable *cancellable);
-void          mbimcli_ms_basic_connect_extensions_run   (MbimDevice *device,
+void          mbimcli_intel_firmware_update_run         (MbimDevice   *device,
                                                          GCancellable *cancellable);
+void          mbimcli_ms_basic_connect_extensions_run   (MbimDevice   *device,
+                                                         GCancellable *cancellable);
+void          mbimcli_quectel_run                       (MbimDevice   *device,
+                                                         GCancellable *cancellable);
+void          mbimcli_intel_thermal_rf_run              (MbimDevice   *device,
+                                                         GCancellable *cancellable);
+void          mbimcli_ms_voice_extensions_run           (MbimDevice   *device,
+                                                         GCancellable *cancellable);
+void          mbimcli_ms_uicc_low_level_access_run      (MbimDevice   *device,
+                                                         GCancellable *cancellable);
+void          mbimcli_intel_mutual_authentication_run   (MbimDevice   *device,
+                                                         GCancellable *cancellable);
+void          mbimcli_intel_tools_run                   (MbimDevice   *device,
+                                                         GCancellable *cancellable);
+void          mbimcli_google_run                        (MbimDevice   *device,
+                                                         GCancellable *cancellable);
+
+
+/* link management */
+GOptionGroup *mbimcli_link_management_get_option_group (void);
+gboolean      mbimcli_link_management_options_enabled  (void);
+void          mbimcli_link_management_run              (MbimDevice   *device,
+                                                        GCancellable *cancellable);
 
 #endif /* __MBIMCLI_H__ */

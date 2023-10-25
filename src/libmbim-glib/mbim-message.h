@@ -1,24 +1,10 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
- *
- * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2013 - 2022 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2022 Google, Inc.
  */
 
 #ifndef _LIBMBIM_GLIB_MBIM_MESSAGE_H_
@@ -175,6 +161,10 @@ void mbim_message_unref (MbimMessage *self);
  *
  * Gets a printable string with the contents of the whole MBIM message.
  *
+ * This method will not fail if the parsing of the message contents fails,
+ * a fallback text with the error will be included in the generated printable
+ * information instead.
+ *
  * Returns: a newly allocated string, which should be freed with g_free().
  *
  * Since: 1.0
@@ -182,6 +172,43 @@ void mbim_message_unref (MbimMessage *self);
 gchar *mbim_message_get_printable (const MbimMessage  *self,
                                    const gchar        *line_prefix,
                                    gboolean            headers_only);
+
+/**
+ * mbim_message_get_printable_full:
+ * @self: a #MbimMessage.
+ * @mbimex_version_major: major version of the agreed MBIMEx support.
+ * @mbimex_version_minor: minor version of the agreed MBIMEx support.
+ * @line_prefix: prefix string to use in each new generated line.
+ * @headers_only: %TRUE if only basic headers should be printed.
+ * @error: return location for error or %NULL.
+ *
+ * Gets a printable string with the contents of the whole MBIM message.
+ *
+ * Unlike mbim_message_get_printable(), this method allows specifying the
+ * MBIMEx version agreed between host and device, so that the correct
+ * processing and parsing is done on messages in the newer MBIMEx versions.
+ *
+ * If @mbimex_version_major < 2, this method behaves exactly as
+ * mbim_message_get_printable().
+ *
+ * If the specified @mbimex_version_major is unsupported, an error will be
+ * returned.
+ *
+ * This method will not fail if the parsing of the message contents fails,
+ * a fallback text with the error will be included in the generated printable
+ * information instead.
+ *
+ * Returns: a newly allocated string which should be freed with g_free(), or
+ * #NULL if @error is set.
+ *
+ * Since: 1.28
+ */
+gchar *mbim_message_get_printable_full (const MbimMessage  *self,
+                                        guint8              mbimex_version_major,
+                                        guint8              mbimex_version_minor,
+                                        const gchar        *line_prefix,
+                                        gboolean            headers_only,
+                                        GError            **error);
 
 /**
  * mbim_message_get_raw:
@@ -246,6 +273,30 @@ guint32 mbim_message_get_transaction_id (const MbimMessage *self);
  */
 void mbim_message_set_transaction_id (MbimMessage *self,
                                       guint32      transaction_id);
+
+/**
+ * mbim_message_validate:
+ * @self: a #MbimMessage.
+ * @error: return location for error or %NULL.
+ *
+ * Validates the contents of the headers in the MBIM message.
+ *
+ * This operation may be used to ensure that the message contains all bytes
+ * it is expected to contain and that it is of a valid type.
+ *
+ * This operation also ensures the message is complete and not a partial
+ * MBIM fragment.
+ *
+ * This operation does not validate that the specific contents of a given
+ * message type are available, that is done by the methods retrieving those
+ * specific contents.
+ *
+ * Returns: %TRUE if the message is valid, %FALSE if @error is set.
+ *
+ * Since: 1.28
+ */
+gboolean mbim_message_validate (const MbimMessage  *self,
+                                GError            **error);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (MbimMessage, mbim_message_unref)
 

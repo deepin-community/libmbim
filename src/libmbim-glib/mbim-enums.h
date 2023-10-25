@@ -1,22 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
  *
  * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
  */
@@ -61,6 +46,7 @@ typedef enum { /*< since=1.0 >*/
 
 /**
  * MbimCellularClass:
+ * @MBIM_CELLULAR_CLASS_NONE: None. Since 1.30.
  * @MBIM_CELLULAR_CLASS_GSM: Device is 3GPP.
  * @MBIM_CELLULAR_CLASS_CDMA: Device is 3GPP2.
  *
@@ -69,6 +55,7 @@ typedef enum { /*< since=1.0 >*/
  * Since: 1.0
  */
 typedef enum { /*< since=1.0 >*/
+    MBIM_CELLULAR_CLASS_NONE = 0,
     MBIM_CELLULAR_CLASS_GSM  = 1 << 0,
     MBIM_CELLULAR_CLASS_CDMA = 1 << 1
 } MbimCellularClass;
@@ -93,6 +80,7 @@ typedef enum { /*< since=1.0 >*/
 
 /**
  * MbimSimClass:
+ * @MBIM_SIM_CLASS_NONE: None. Since 1.30.
  * @MBIM_SIM_CLASS_LOGICAL: No physical SIM.
  * @MBIM_SIM_CLASS_REMOVABLE: Physical removable SIM.
  *
@@ -101,18 +89,22 @@ typedef enum { /*< since=1.0 >*/
  * Since: 1.0
  */
 typedef enum { /*< since=1.0 >*/
+    MBIM_SIM_CLASS_NONE      = 0,
     MBIM_SIM_CLASS_LOGICAL   = 1 << 0,
     MBIM_SIM_CLASS_REMOVABLE = 1 << 1
 } MbimSimClass;
 
 /**
  * MbimDataClass:
+ * @MBIM_DATA_CLASS_NONE: None. Since 1.30.
  * @MBIM_DATA_CLASS_GPRS: GPRS.
  * @MBIM_DATA_CLASS_EDGE: EDGE.
  * @MBIM_DATA_CLASS_UMTS: UMTS.
  * @MBIM_DATA_CLASS_HSDPA: HSDPA.
  * @MBIM_DATA_CLASS_HSUPA: HSUPA.
  * @MBIM_DATA_CLASS_LTE: LTE.
+ * @MBIM_DATA_CLASS_5G_NSA: 5G NSA (MS MBIMEx v2.0). Since 1.28.
+ * @MBIM_DATA_CLASS_5G_SA: 5G SA (MS MBIMEx v2.0). Since 1.28.
  * @MBIM_DATA_CLASS_1XRTT: 1xRTT.
  * @MBIM_DATA_CLASS_1XEVDO: 1xEV-DO.
  * @MBIM_DATA_CLASS_1XEVDO_REVA: 1xEV-DO RevA
@@ -124,16 +116,26 @@ typedef enum { /*< since=1.0 >*/
  *
  * Data class.
  *
+ * Both 5G related values are introduced in MBIM Extension v2.0, but given
+ * the update is compatible with the original MBIM enumeration, devices may
+ * report them without having enabled MBIM Extension v2.0 support.
+ *
+ * This type is updated in MBIM Extension v3.0 in a non-backwards compatible
+ * way, see #MbimDataClassV3.
+ *
  * Since: 1.0
  */
 typedef enum { /*< since=1.0 >*/
+    MBIM_DATA_CLASS_NONE        = 0,
     MBIM_DATA_CLASS_GPRS        = 1 << 0,
     MBIM_DATA_CLASS_EDGE        = 1 << 1,
     MBIM_DATA_CLASS_UMTS        = 1 << 2,
     MBIM_DATA_CLASS_HSDPA       = 1 << 3,
     MBIM_DATA_CLASS_HSUPA       = 1 << 4,
     MBIM_DATA_CLASS_LTE         = 1 << 5,
-    /* Bits 6 to 15 reserved for future 3GPP classes */
+    MBIM_DATA_CLASS_5G_NSA      = 1 << 6,
+    MBIM_DATA_CLASS_5G_SA       = 1 << 7,
+    /* Bits 8 to 15 reserved for future 3GPP classes */
     MBIM_DATA_CLASS_1XRTT       = 1 << 16,
     MBIM_DATA_CLASS_1XEVDO      = 1 << 17,
     MBIM_DATA_CLASS_1XEVDO_REVA = 1 << 18,
@@ -147,6 +149,7 @@ typedef enum { /*< since=1.0 >*/
 
 /**
  * MbimSmsCaps:
+ * @MBIM_SMS_CAPS_NONE: None. Since 1.30.
  * @MBIM_SMS_CAPS_PDU_RECEIVE: Can receive in PDU mode.
  * @MBIM_SMS_CAPS_PDU_SEND: Can send in PDU mode.
  * @MBIM_SMS_CAPS_TEXT_RECEIVE: Can receive in text mode.
@@ -157,6 +160,7 @@ typedef enum { /*< since=1.0 >*/
  * Since: 1.0
  */
 typedef enum { /*< since=1.0 >*/
+    MBIM_SMS_CAPS_NONE         = 0,
     MBIM_SMS_CAPS_PDU_RECEIVE  = 1 << 0,
     MBIM_SMS_CAPS_PDU_SEND     = 1 << 1,
     MBIM_SMS_CAPS_TEXT_RECEIVE = 1 << 2,
@@ -165,22 +169,30 @@ typedef enum { /*< since=1.0 >*/
 
 /**
  * MbimCtrlCaps:
+ * @MBIM_CTRL_CAPS_NONE: None. Since 1.28.
  * @MBIM_CTRL_CAPS_REG_MANUAL: Device allows manual network selection.
  * @MBIM_CTRL_CAPS_HW_RADIO_SWITCH: Device has a hardware radio power switch.
  * @MBIM_CTRL_CAPS_CDMA_MOBILE_IP: The CDMA function supports Mobile IP.
  * @MBIM_CTRL_CAPS_CDMA_SIMPLE_IP: The CDMA function supports Simple IP.
  * @MBIM_CTRL_CAPS_MULTI_CARRIER: Device can work with multiple providers.
+ * @MBIM_CTRL_CAPS_ESIM: Device supports eSIM (MS MBIMEx v3.0). Since 1.28.
+ * @MBIM_CTRL_CAPS_UE_POLICY_ROUTE_SELECTION: Device supports including the route selection descriptors as part of the UE policies (MS MBIMEx v3.0). Since 1.28.
+ * @MBIM_CTRL_CAPS_SIM_HOT_SWAP_CAPABLE: Device supports SIM hot-swap (MS MBIMEx v3.0). Since 1.28.
  *
  * Control capabilities.
  *
  * Since: 1.0
  */
 typedef enum { /*< since=1.0 >*/
-    MBIM_CTRL_CAPS_REG_MANUAL      = 1 << 0,
-    MBIM_CTRL_CAPS_HW_RADIO_SWITCH = 1 << 1,
-    MBIM_CTRL_CAPS_CDMA_MOBILE_IP  = 1 << 2,
-    MBIM_CTRL_CAPS_CDMA_SIMPLE_IP  = 1 << 3,
-    MBIM_CTRL_CAPS_MULTI_CARRIER   = 1 << 4
+    MBIM_CTRL_CAPS_NONE                      = 0,
+    MBIM_CTRL_CAPS_REG_MANUAL                = 1 << 0,
+    MBIM_CTRL_CAPS_HW_RADIO_SWITCH           = 1 << 1,
+    MBIM_CTRL_CAPS_CDMA_MOBILE_IP            = 1 << 2,
+    MBIM_CTRL_CAPS_CDMA_SIMPLE_IP            = 1 << 3,
+    MBIM_CTRL_CAPS_MULTI_CARRIER             = 1 << 4,
+    MBIM_CTRL_CAPS_ESIM                      = 1 << 5,
+    MBIM_CTRL_CAPS_UE_POLICY_ROUTE_SELECTION = 1 << 6,
+    MBIM_CTRL_CAPS_SIM_HOT_SWAP_CAPABLE      = 1 << 7,
 } MbimCtrlCaps;
 
 /*****************************************************************************/
@@ -195,6 +207,8 @@ typedef enum { /*< since=1.0 >*/
  * @MBIM_SUBSCRIBER_READY_STATE_FAILURE: Failure.
  * @MBIM_SUBSCRIBER_READY_STATE_NOT_ACTIVATED: Not activated.
  * @MBIM_SUBSCRIBER_READY_STATE_DEVICE_LOCKED: Device locked.
+ * @MBIM_SUBSCRIBER_READY_STATE_NO_ESIM_PROFILE: The card is ready but does not
+ *  have any enabled profiles (MS MBIMEx). Since 1.28.
  *
  * Ready state of the subscriber.
  *
@@ -208,6 +222,7 @@ typedef enum { /*< since=1.0 >*/
     MBIM_SUBSCRIBER_READY_STATE_FAILURE          = 4,
     MBIM_SUBSCRIBER_READY_STATE_NOT_ACTIVATED    = 5,
     MBIM_SUBSCRIBER_READY_STATE_DEVICE_LOCKED    = 6,
+    MBIM_SUBSCRIBER_READY_STATE_NO_ESIM_PROFILE  = 7,
 } MbimSubscriberReadyState;
 
 /**
@@ -264,6 +279,8 @@ typedef enum { /*< since=1.0 >*/
  * @MBIM_PIN_TYPE_NETWORK_SUBSET_PUK: The network subset personalization unlock key.
  * @MBIM_PIN_TYPE_SERVICE_PROVIDER_PUK: The service provider (SP) personalization unlock key.
  * @MBIM_PIN_TYPE_CORPORATE_PUK: The corporate personalization unlock key.
+ * @MBIM_PIN_TYPE_NEV: The NEV key (MS UICC low-level access). Since 1.28.
+ * @MBIM_PIN_TYPE_ADM: The administrative key (MS UICC low-level access). Since 1.28.
  *
  * PIN Types.
  *
@@ -287,7 +304,9 @@ typedef enum { /*< since=1.0 >*/
     MBIM_PIN_TYPE_NETWORK_PUK          = 14,
     MBIM_PIN_TYPE_NETWORK_SUBSET_PUK   = 15,
     MBIM_PIN_TYPE_SERVICE_PROVIDER_PUK = 16,
-    MBIM_PIN_TYPE_CORPORATE_PUK        = 17
+    MBIM_PIN_TYPE_CORPORATE_PUK        = 17,
+    MBIM_PIN_TYPE_NEV                  = 18,
+    MBIM_PIN_TYPE_ADM                  = 19,
 } MbimPinType;
 
 /**
@@ -385,6 +404,25 @@ typedef enum { /*< since=1.2 >*/
 } MbimProviderState;
 
 /*****************************************************************************/
+/* Connect V3' enums */
+
+/**
+ * MbimAccessMediaType:
+ * @MBIM_ACCESS_MEDIA_TYPE_UNKNOWN: None, or unknown.
+ * @MBIM_ACCESS_MEDIA_TYPE_3GPP: 3GPP only.
+ * @MBIM_ACCESS_MEDIA_TYPE_3GPP_PREFERRED: 3GPP Preferred.
+ *
+ * Access type preference.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_ACCESS_MEDIA_TYPE_UNKNOWN        = 0,
+    MBIM_ACCESS_MEDIA_TYPE_3GPP           = 1,
+    MBIM_ACCESS_MEDIA_TYPE_3GPP_PREFERRED = 2,
+} MbimAccessMediaType;
+
+/*****************************************************************************/
 /* 'Visible Providers' enums */
 
 /**
@@ -406,7 +444,7 @@ typedef enum { /*< since=1.2 >*/
 
 /**
  * MbimNwError:
- * @MBIM_NW_ERROR_UNKNOWN: Unknown or unset error.
+ * @MBIM_NW_ERROR_NONE: No error. Since 1.28.
  * @MBIM_NW_ERROR_IMSI_UNKNOWN_IN_HLR: IMSI unknown in the HLR.
  * @MBIM_NW_ERROR_ILLEGAL_MS: Illegal MS. Since 1.10.
  * @MBIM_NW_ERROR_IMSI_UNKNOWN_IN_VLR: IMSI unknown in the VLR.
@@ -438,10 +476,31 @@ typedef enum { /*< since=1.2 >*/
  * @MBIM_NW_ERROR_REQUESTED_SERVICE_OPTION_NOT_SUBSCRIBED: Requested service option not subscribed. Since 1.10.
  * @MBIM_NW_ERROR_SERVICE_OPTION_TEMPORARILY_OUT_OF_ORDER: Service option temporarily out of order. Since 1.10.
  * @MBIM_NW_ERROR_NO_PDP_CONTEXT_ACTIVATED: No PDP context activated. Since 1.10.
+ * @MBIM_NW_ERROR_SEMANTIC_ERROR_IN_THE_TFT_OPERATION: Semantic error in the TFT operation. Since 1.28.
+ * @MBIM_NW_ERROR_SYNTACTICAL_ERROR_IN_THE_TFT_OPERATION: Syntactical error in the TFT operation. Since 1.28.
+ * @MBIM_NW_ERROR_UNKNOWN_PDP_CONTEXT: Unknown PDP context. Since 1.28.
+ * @MBIM_NW_ERROR_SEMANTIC_ERRORS_IN_PACKET_FILTER: Semantic errors in packet filter. Since 1.28.
+ * @MBIM_NW_ERROR_SYNTACTICAL_ERRORS_IN_PACKET_FILTER: Syntactical errors in packet filter. Since 1.28.
+ * @MBIM_NW_ERROR_PDP_CONTEXT_WITHOUT_TFT_ALREADY_ACTIVATED: PDP context without TFT already activated. Since 1.28.
+ * @MBIM_NW_ERROR_REQUEST_REJECTED_OR_BEARER_CONTROL_MODE_VIOLATION: Request rejected, Bearer Control Mode violation. Since 1.28.
+ * @MBIM_NW_ERROR_LAST_PDN_DISCONNECTION_NOT_ALLOWED: Last PDN disconnection not allowed. Since 1.28.
  * @MBIM_NW_ERROR_PDP_TYPE_IPV4_ONLY_ALLOWED: PDP type IPv4 only allowed. Since 1.18.
  * @MBIM_NW_ERROR_PDP_TYPE_IPV6_ONLY_ALLOWED: PDP type IPv6 only allowed. Since 1.18.
+ * @MBIM_NW_ERROR_NO_NETWORK_SLICES_AVAILABLE: No network slices available  Since 1.28.
  * @MBIM_NW_ERROR_MAXIMUM_NUMBER_OF_PDP_CONTEXTS_REACHED: Maximum number of PDP contexts reached. Since 1.18.
  * @MBIM_NW_ERROR_REQUESTED_APN_NOT_SUPPORTED_IN_CURRENT_RAT_AND_PLMN: Requested APN not supported in current RAT and PLMN combination. Since 1.18.
+ * @MBIM_NW_ERROR_INSUFFICIENT_RESOURCES_FOR_SPECIFIC_SLICE_AND_DNN: Insufficient resources for specific slice and DNN. Since 1.28.
+ * @MBIM_NW_ERROR_INSUFFICIENT_RESOURCES_FOR_SPECIFIC_SLICE: Insufficient resources for specific slice. Since 1.28.
+ * @MBIM_NW_ERROR_NGKSI_ALREADY_IN_USE: NgKSI already in use. Since 1.28.
+ * @MBIM_NW_ERROR_NON_3GPP_ACCESS_TO_5GCN_NOT_ALLOWED: Non-3GPP access to 5GCN not allowe. Since 1.28.
+ * @MBIM_NW_ERROR_SERVING_NETWORK_NOT_AUTHORIZED: Serving network not authorized. Since 1.28.
+ * @MBIM_NW_ERROR_TEMPORARILY_NOT_AUTHORIZED_FOR_THIS_SNPN: Temporarily not authorized for this SNPN. Since 1.28.
+ * @MBIM_NW_ERROR_PERMANENTLY_NOT_AUTHORIZED_FOR_THIS_SNPN: Permanently not authorized for this SNPN. Since 1.28.
+ * @MBIM_NW_ERROR_NOT_AUTHORIZED_FOR_THIS_CAG_OR_AUTHORIZED_FOR_CAG_CELLS_ONLY: Not authorized for this CAG or authorized for CAG cells. Since 1.28.
+ * @MBIM_NW_ERROR_WIRELINE_ACCESS_AREA_NOT_ALLOWED: Wireline access area not allowed. Since 1.28.
+ * @MBIM_NW_ERROR_PAYLOAD_WAS_NOT_FORWARDED: Payload was not forwarded. Since 1.28.
+ * @MBIM_NW_ERROR_DNN_NOT_SUPPORTED_OR_NOT_SUBSCRIBED_IN_THE_SLICE: DNN not supported or not subscribed in the slice. Since 1.28.
+ * @MBIM_NW_ERROR_INSUFFICIENT_USER_PLANE_RESOURCES_FOR_THE_PDU_SESSION: Insufficient user-plane resources for the PDU session. Since 1.28.
  * @MBIM_NW_ERROR_SEMANTICALLY_INCORRECT_MESSAGE: Semantically incorrect message. Since 1.10.
  * @MBIM_NW_ERROR_INVALID_MANDATORY_INFORMATION: Invalid mandatory information. Since 1.10.
  * @MBIM_NW_ERROR_MESSAGE_TYPE_NON_EXISTENT_OR_NOT_IMPLEMENTED: Message type non-existent or not implemented. Since 1.10.
@@ -458,52 +517,73 @@ typedef enum { /*< since=1.2 >*/
  * Since: 1.0
  */
 typedef enum { /*< since=1.0 >*/
-    MBIM_NW_ERROR_UNKNOWN                                                    = 0,
-    MBIM_NW_ERROR_IMSI_UNKNOWN_IN_HLR                                        = 2,
-    MBIM_NW_ERROR_ILLEGAL_MS                                                 = 3,
-    MBIM_NW_ERROR_IMSI_UNKNOWN_IN_VLR                                        = 4,
-    MBIM_NW_ERROR_IMEI_NOT_ACCEPTED                                          = 5,
-    MBIM_NW_ERROR_ILLEGAL_ME                                                 = 6,
-    MBIM_NW_ERROR_GPRS_NOT_ALLOWED                                           = 7,
-    MBIM_NW_ERROR_GPRS_AND_NON_GPRS_NOT_ALLOWED                              = 8,
-    MBIM_NW_ERROR_MS_IDENTITY_NOT_DERIVED_BY_NETWORK                         = 9,
-    MBIM_NW_ERROR_IMPLICITLY_DETACHED                                        = 10,
-    MBIM_NW_ERROR_PLMN_NOT_ALLOWED                                           = 11,
-    MBIM_NW_ERROR_LOCATION_AREA_NOT_ALLOWED                                  = 12,
-    MBIM_NW_ERROR_ROAMING_NOT_ALLOWED_IN_LOCATION_AREA                       = 13,
-    MBIM_NW_ERROR_GPRS_NOT_ALLOWED_IN_PLMN                                   = 14,
-    MBIM_NW_ERROR_NO_CELLS_IN_LOCATION_AREA                                  = 15,
-    MBIM_NW_ERROR_MSC_TEMPORARILY_NOT_REACHABLE                              = 16,
-    MBIM_NW_ERROR_NETWORK_FAILURE                                            = 17,
-    MBIM_NW_ERROR_MAC_FAILURE                                                = 20,
-    MBIM_NW_ERROR_SYNCH_FAILURE                                              = 21,
-    MBIM_NW_ERROR_CONGESTION                                                 = 22,
-    MBIM_NW_ERROR_GSM_AUTHENTICATION_UNACCEPTABLE                            = 23,
-    MBIM_NW_ERROR_NOT_AUTHORIZED_FOR_CSG                                     = 25,
-    MBIM_NW_ERROR_INSUFFICIENT_RESOURCES                                     = 26,
-    MBIM_NW_ERROR_MISSING_OR_UNKNOWN_APN                                     = 27,
-    MBIM_NW_ERROR_UNKNOWN_PDP_ADDRESS_OR_TYPE                                = 28,
-    MBIM_NW_ERROR_USER_AUTHENTICATION_FAILED                                 = 29,
-    MBIM_NW_ERROR_ACTIVATION_REJECTED_BY_GGSN_OR_GW                          = 30,
-    MBIM_NW_ERROR_ACTIVATION_REJECTED_UNSPECIFIED                            = 31,
-    MBIM_NW_ERROR_SERVICE_OPTION_NOT_SUPPORTED                               = 32,
-    MBIM_NW_ERROR_REQUESTED_SERVICE_OPTION_NOT_SUBSCRIBED                    = 33,
-    MBIM_NW_ERROR_SERVICE_OPTION_TEMPORARILY_OUT_OF_ORDER                    = 34,
-    MBIM_NW_ERROR_NO_PDP_CONTEXT_ACTIVATED                                   = 40,
-    MBIM_NW_ERROR_PDP_TYPE_IPV4_ONLY_ALLOWED                                 = 50,
-    MBIM_NW_ERROR_PDP_TYPE_IPV6_ONLY_ALLOWED                                 = 51,
-    MBIM_NW_ERROR_MAXIMUM_NUMBER_OF_PDP_CONTEXTS_REACHED                     = 65,
-    MBIM_NW_ERROR_REQUESTED_APN_NOT_SUPPORTED_IN_CURRENT_RAT_AND_PLMN        = 66,
-    MBIM_NW_ERROR_SEMANTICALLY_INCORRECT_MESSAGE                             = 95,
-    MBIM_NW_ERROR_INVALID_MANDATORY_INFORMATION                              = 96,
-    MBIM_NW_ERROR_MESSAGE_TYPE_NON_EXISTENT_OR_NOT_IMPLEMENTED               = 97,
-    MBIM_NW_ERROR_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE            = 98,
-    MBIM_NW_ERROR_INFORMATION_ELEMENT_NON_EXISTENT_OR_NOT_IMPLEMENTED        = 99,
-    MBIM_NW_ERROR_CONDITIONAL_IE_ERROR                                       = 100,
-    MBIM_NW_ERROR_MESSAGE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE                 = 101,
-    MBIM_NW_ERROR_PROTOCOL_ERROR_UNSPECIFIED                                 = 111,
-    MBIM_NW_ERROR_APN_RESTRICTION_VALUE_INCOMPATIBLE_WITH_ACTIVE_PDP_CONTEXT = 112,
-    MBIM_NW_ERROR_MULTIPLE_ACCESSES_TO_A_PDN_CONNECTION_NOT_ALLOWED          = 113
+    MBIM_NW_ERROR_NONE                                                         = 0,
+    MBIM_NW_ERROR_IMSI_UNKNOWN_IN_HLR                                          = 2,
+    MBIM_NW_ERROR_ILLEGAL_MS                                                   = 3,
+    MBIM_NW_ERROR_IMSI_UNKNOWN_IN_VLR                                          = 4,
+    MBIM_NW_ERROR_IMEI_NOT_ACCEPTED                                            = 5,
+    MBIM_NW_ERROR_ILLEGAL_ME                                                   = 6,
+    MBIM_NW_ERROR_GPRS_NOT_ALLOWED                                             = 7,
+    MBIM_NW_ERROR_GPRS_AND_NON_GPRS_NOT_ALLOWED                                = 8,
+    MBIM_NW_ERROR_MS_IDENTITY_NOT_DERIVED_BY_NETWORK                           = 9,
+    MBIM_NW_ERROR_IMPLICITLY_DETACHED                                          = 10,
+    MBIM_NW_ERROR_PLMN_NOT_ALLOWED                                             = 11,
+    MBIM_NW_ERROR_LOCATION_AREA_NOT_ALLOWED                                    = 12,
+    MBIM_NW_ERROR_ROAMING_NOT_ALLOWED_IN_LOCATION_AREA                         = 13,
+    MBIM_NW_ERROR_GPRS_NOT_ALLOWED_IN_PLMN                                     = 14,
+    MBIM_NW_ERROR_NO_CELLS_IN_LOCATION_AREA                                    = 15,
+    MBIM_NW_ERROR_MSC_TEMPORARILY_NOT_REACHABLE                                = 16,
+    MBIM_NW_ERROR_NETWORK_FAILURE                                              = 17,
+    MBIM_NW_ERROR_MAC_FAILURE                                                  = 20,
+    MBIM_NW_ERROR_SYNCH_FAILURE                                                = 21,
+    MBIM_NW_ERROR_CONGESTION                                                   = 22,
+    MBIM_NW_ERROR_GSM_AUTHENTICATION_UNACCEPTABLE                              = 23,
+    MBIM_NW_ERROR_NOT_AUTHORIZED_FOR_CSG                                       = 25,
+    MBIM_NW_ERROR_INSUFFICIENT_RESOURCES                                       = 26,
+    MBIM_NW_ERROR_MISSING_OR_UNKNOWN_APN                                       = 27,
+    MBIM_NW_ERROR_UNKNOWN_PDP_ADDRESS_OR_TYPE                                  = 28,
+    MBIM_NW_ERROR_USER_AUTHENTICATION_FAILED                                   = 29,
+    MBIM_NW_ERROR_ACTIVATION_REJECTED_BY_GGSN_OR_GW                            = 30,
+    MBIM_NW_ERROR_ACTIVATION_REJECTED_UNSPECIFIED                              = 31,
+    MBIM_NW_ERROR_SERVICE_OPTION_NOT_SUPPORTED                                 = 32,
+    MBIM_NW_ERROR_REQUESTED_SERVICE_OPTION_NOT_SUBSCRIBED                      = 33,
+    MBIM_NW_ERROR_SERVICE_OPTION_TEMPORARILY_OUT_OF_ORDER                      = 34,
+    MBIM_NW_ERROR_NO_PDP_CONTEXT_ACTIVATED                                     = 40,
+    MBIM_NW_ERROR_SEMANTIC_ERROR_IN_THE_TFT_OPERATION                          = 41,
+    MBIM_NW_ERROR_SYNTACTICAL_ERROR_IN_THE_TFT_OPERATION                       = 42,
+    MBIM_NW_ERROR_UNKNOWN_PDP_CONTEXT                                          = 43,
+    MBIM_NW_ERROR_SEMANTIC_ERRORS_IN_PACKET_FILTER                             = 44,
+    MBIM_NW_ERROR_SYNTACTICAL_ERRORS_IN_PACKET_FILTER                          = 45,
+    MBIM_NW_ERROR_PDP_CONTEXT_WITHOUT_TFT_ALREADY_ACTIVATED                    = 46,
+    MBIM_NW_ERROR_REQUEST_REJECTED_OR_BEARER_CONTROL_MODE_VIOLATION            = 48,
+    MBIM_NW_ERROR_LAST_PDN_DISCONNECTION_NOT_ALLOWED                           = 49,
+    MBIM_NW_ERROR_PDP_TYPE_IPV4_ONLY_ALLOWED                                   = 50,
+    MBIM_NW_ERROR_PDP_TYPE_IPV6_ONLY_ALLOWED                                   = 51,
+    MBIM_NW_ERROR_NO_NETWORK_SLICES_AVAILABLE                                  = 62,
+    MBIM_NW_ERROR_MAXIMUM_NUMBER_OF_PDP_CONTEXTS_REACHED                       = 65,
+    MBIM_NW_ERROR_REQUESTED_APN_NOT_SUPPORTED_IN_CURRENT_RAT_AND_PLMN          = 66,
+    MBIM_NW_ERROR_INSUFFICIENT_RESOURCES_FOR_SPECIFIC_SLICE_AND_DNN            = 67,
+    MBIM_NW_ERROR_INSUFFICIENT_RESOURCES_FOR_SPECIFIC_SLICE                    = 69,
+    MBIM_NW_ERROR_NGKSI_ALREADY_IN_USE                                         = 71,
+    MBIM_NW_ERROR_NON_3GPP_ACCESS_TO_5GCN_NOT_ALLOWED                          = 72,
+    MBIM_NW_ERROR_SERVING_NETWORK_NOT_AUTHORIZED                               = 73,
+    MBIM_NW_ERROR_TEMPORARILY_NOT_AUTHORIZED_FOR_THIS_SNPN                     = 74,
+    MBIM_NW_ERROR_PERMANENTLY_NOT_AUTHORIZED_FOR_THIS_SNPN                     = 75,
+    MBIM_NW_ERROR_NOT_AUTHORIZED_FOR_THIS_CAG_OR_AUTHORIZED_FOR_CAG_CELLS_ONLY = 76,
+    MBIM_NW_ERROR_WIRELINE_ACCESS_AREA_NOT_ALLOWED                             = 77,
+    MBIM_NW_ERROR_PAYLOAD_WAS_NOT_FORWARDED                                    = 90,
+    MBIM_NW_ERROR_DNN_NOT_SUPPORTED_OR_NOT_SUBSCRIBED_IN_THE_SLICE             = 91,
+    MBIM_NW_ERROR_INSUFFICIENT_USER_PLANE_RESOURCES_FOR_THE_PDU_SESSION        = 92,
+    MBIM_NW_ERROR_SEMANTICALLY_INCORRECT_MESSAGE                               = 95,
+    MBIM_NW_ERROR_INVALID_MANDATORY_INFORMATION                                = 96,
+    MBIM_NW_ERROR_MESSAGE_TYPE_NON_EXISTENT_OR_NOT_IMPLEMENTED                 = 97,
+    MBIM_NW_ERROR_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE              = 98,
+    MBIM_NW_ERROR_INFORMATION_ELEMENT_NON_EXISTENT_OR_NOT_IMPLEMENTED          = 99,
+    MBIM_NW_ERROR_CONDITIONAL_IE_ERROR                                         = 100,
+    MBIM_NW_ERROR_MESSAGE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE                   = 101,
+    MBIM_NW_ERROR_PROTOCOL_ERROR_UNSPECIFIED                                   = 111,
+    MBIM_NW_ERROR_APN_RESTRICTION_VALUE_INCOMPATIBLE_WITH_ACTIVE_PDP_CONTEXT   = 112,
+    MBIM_NW_ERROR_MULTIPLE_ACCESSES_TO_A_PDN_CONNECTION_NOT_ALLOWED            = 113
 } MbimNwError;
 
 /**
@@ -575,6 +655,24 @@ typedef enum { /*< since=1.0 >*/
     MBIM_REGISTRATION_FLAG_MANUAL_SELECTION_NOT_AVAILABLE  = 1 << 0,
     MBIM_REGISTRATION_FLAG_PACKET_SERVICE_AUTOMATIC_ATTACH = 1 << 1,
 } MbimRegistrationFlag;
+
+/*****************************************************************************/
+/* 'Wake Reason' enums */
+/**
+ * MbimWakeType:
+ * @MBIM_WAKE_TYPE_CID_RESPONSE: A CID response wakes device.
+ * @MBIM_WAKE_TYPE_CID_INDICATION: A CID indication wakes device.
+ * @MBIM_WAKE_TYPE_PACKET: An incoming packet wakes device.
+ *
+ * Wake type.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_WAKE_TYPE_CID_RESPONSE   = 0,
+    MBIM_WAKE_TYPE_CID_INDICATION = 1,
+    MBIM_WAKE_TYPE_PACKET         = 2,
+} MbimWakeType;
 
 /*****************************************************************************/
 /* 'Packet Service' enums */
@@ -887,8 +985,8 @@ typedef enum { /*< since=1.4 >*/
  */
 typedef enum { /*< since=1.4 >*/
     MBIM_SMS_STATUS_FLAG_NONE               = 0,
-    MBIM_SMS_STATUS_FLAG_MESSAGE_STORE_FULL = 1,
-    MBIM_SMS_STATUS_FLAG_NEW_MESSAGE        = 2
+    MBIM_SMS_STATUS_FLAG_MESSAGE_STORE_FULL = 1 << 0,
+    MBIM_SMS_STATUS_FLAG_NEW_MESSAGE        = 1 << 1,
 } MbimSmsStatusFlag;
 
 /*****************************************************************************/
@@ -1089,6 +1187,121 @@ typedef enum { /*< since=1.4 >*/
 } MbimDssLinkState;
 
 /*****************************************************************************/
+/* 'QDU update session' enums */
+
+/**
+ * MbimQduSessionAction:
+ * @MBIM_QDU_SESSION_ACTION_START: Start.
+ * @MBIM_QDU_SESSION_ACTION_STOP: Stop.
+ *
+ * Action performed for the session initialization.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_QDU_SESSION_ACTION_START = 0,
+    MBIM_QDU_SESSION_ACTION_STOP  = 1,
+} MbimQduSessionAction;
+
+/*****************************************************************************/
+/* 'QDU session type' enums */
+
+/**
+ * MbimQduSessionType:
+ * @MBIM_QDU_SESSION_TYPE_NONE: No update session.
+ * @MBIM_QDU_SESSION_TYPE_LE: LE-based update procedure.
+ *
+ * QDU session types.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_QDU_SESSION_TYPE_NONE = 0,
+    MBIM_QDU_SESSION_TYPE_LE   = 1,
+} MbimQduSessionType;
+
+/*****************************************************************************/
+/* 'QDU session status' enums */
+
+/**
+ * MbimQduSessionStatus:
+ * @MBIM_QDU_SESSION_STATUS_INACTIVE: Update session is not active.
+ * @MBIM_QDU_SESSION_STATUS_FILE_TRANSFER: Updated files are being transferred from host to function or function is waiting host to send updated files.
+ * @MBIM_QDU_SESSION_STATUS_APPLY_UPDATE: The function is applying the update package.
+ *
+ * QDU session status.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_QDU_SESSION_STATUS_INACTIVE      = 0,
+    MBIM_QDU_SESSION_STATUS_FILE_TRANSFER = 1,
+    MBIM_QDU_SESSION_STATUS_APPLY_UPDATE  = 2,
+} MbimQduSessionStatus;
+
+/*****************************************************************************/
+/* 'QDU session result' enums */
+
+/**
+ * MbimQduSessionResult:
+ * @MBIM_QDU_SESSION_RESULT_SUCCESS: Success
+ * @MBIM_QDU_SESSION_RESULT_FAILURE: Failure
+ *
+ * QDU session result.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_QDU_SESSION_RESULT_SUCCESS = 0,
+    MBIM_QDU_SESSION_RESULT_FAILURE = 1,
+} MbimQduSessionResult;
+
+/*****************************************************************************/
+/* 'QDU file type' enums */
+
+/**
+ * MbimQduFileType:
+ * @MBIM_QDU_FILE_TYPE_LITTLE_ENDIAN_PACKAGE: LE Package
+ *
+ * QDU session result.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_QDU_FILE_TYPE_LITTLE_ENDIAN_PACKAGE = 0,
+} MbimQduFileType;
+
+/*****************************************************************************/
+/* 'QDU Quectel Reboot' enums */
+
+/**
+ * MbimQduQuectelRebootType:
+ * @MBIM_QDU_QUECTEL_REBOOT_TYPE_EDL: Reboot to Emergency Download mode
+ *
+ * QDU Quectel Reboot session type.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_QDU_QUECTEL_REBOOT_TYPE_EDL = 17,
+} MbimQduQuectelRebootType;
+
+/*****************************************************************************/
+/* 'QDU Quectel Version' enums */
+
+/**
+ * MbimQduQuectelVersionType:
+ * @MBIM_QDU_QUECTEL_VERSION_TYPE_FW_BUILD_ID: Firmware Build ID
+ *
+ * QDU Quectel Read Version session type.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_QDU_QUECTEL_VERSION_TYPE_FW_BUILD_ID = 256,
+} MbimQduQuectelVersionType;
+
+/*****************************************************************************/
 /* 'ATDS RAT' enums */
 
 /**
@@ -1123,9 +1336,9 @@ typedef enum { /*< since=1.16 >*/
  * Since: 1.16
  */
 typedef enum { /*< since=1.16 >*/
-    MBIM_ATDS_PROVIDER_PLMN_MODE_GSM = 0,
+    MBIM_ATDS_PROVIDER_PLMN_MODE_GSM   = 0,
     MBIM_ATDS_PROVIDER_PLMN_MODE_UTRAN = 6,
-    MBIM_ATDS_PROVIDER_PLMN_MODE_LTE = 7,
+    MBIM_ATDS_PROVIDER_PLMN_MODE_LTE   = 7,
 } MbimAtdsProviderPlmnMode;
 
 /*****************************************************************************/
@@ -1211,6 +1424,667 @@ typedef enum { /*< since=1.18 >*/
     MBIM_LTE_ATTACH_STATE_DETACHED = 0,
     MBIM_LTE_ATTACH_STATE_ATTACHED = 1
 } MbimLteAttachState;
+
+/*****************************************************************************/
+/* 'SAR config' enums */
+
+/**
+ * MbimSarControlMode:
+ * @MBIM_SAR_CONTROL_MODE_DEVICE: SAR backoff is controlled by the modem directly.
+ * @MBIM_SAR_CONTROL_MODE_OS: SAR backoff is controlled by the host operating system.
+ *
+ * SAR backoff mechanism control modes.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_SAR_CONTROL_MODE_DEVICE = 0,
+    MBIM_SAR_CONTROL_MODE_OS     = 1
+} MbimSarControlMode;
+
+/**
+ * MbimSarBackoffState:
+ * @MBIM_SAR_BACKOFF_STATE_DISABLED: SAR backoff is disabled.
+ * @MBIM_SAR_BACKOFF_STATE_ENABLED: SAR backoff is enabled.
+ *
+ * SAR backoff state.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_SAR_BACKOFF_STATE_DISABLED = 0,
+    MBIM_SAR_BACKOFF_STATE_ENABLED  = 1
+} MbimSarBackoffState;
+
+/**
+ * MbimSarWifiHardwareState:
+ * @MBIM_SAR_WIFI_HARDWARE_STATE_INTEGRATED: Integrated.
+ * @MBIM_SAR_WIFI_HARDWARE_STATE_NOT_INTEGRATED: Not integrated.
+ *
+ * Whether the Wi-Fi and cellular SAR are integrated at hardware level.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_SAR_WIFI_HARDWARE_STATE_INTEGRATED     = 0,
+    MBIM_SAR_WIFI_HARDWARE_STATE_NOT_INTEGRATED = 1
+} MbimSarWifiHardwareState;
+
+/**
+ * MbimTransmissionNotificationStatus:
+ * @MBIM_TRANSMISSION_NOTIFICATION_STATUS_DISABLED: Notification disabled.
+ * @MBIM_TRANSMISSION_NOTIFICATION_STATUS_ENABLED: Notification enabled.
+ *
+ * Whether modem channel transmission status notification is disabled or enabled.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_TRANSMISSION_NOTIFICATION_STATUS_DISABLED = 0,
+    MBIM_TRANSMISSION_NOTIFICATION_STATUS_ENABLED  = 1
+} MbimTransmissionNotificationStatus;
+
+/**
+ * MbimTransmissionState:
+ * @MBIM_TRANSMISSION_STATE_INACTIVE: Modem was not actively transmitting data.
+ * @MBIM_TRANSMISSION_STATE_ACTIVE: Modem was actively transmitting data.
+ *
+ * Whether modem is having TX traffic every hysteresis timeout.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_TRANSMISSION_STATE_INACTIVE = 0,
+    MBIM_TRANSMISSION_STATE_ACTIVE   = 1
+} MbimTransmissionState;
+
+/*****************************************************************************/
+/* 'Slot Info Status' enums */
+
+/**
+ * MbimUiccSlotState:
+ * @MBIM_UICC_SLOT_STATE_UNKNOWN: The modem is still in the process of initializing so the SIM slot state is not deterministic.
+ * @MBIM_UICC_SLOT_SATE_OFF_EMPTY: The UICC slot is powered off and no card is present.
+ * @MBIM_UICC_SLOT_STATE_OFF: The UICC slot is powered off.
+ * @MBIM_UICC_SLOT_STATE_EMPTY: The UICC slot is empty(there is no card in it).
+ * @MBIM_UICC_SLOT_STATE_NOT_READY: The UICC slot is occupied and powered on but the card within it is not yet ready.
+ * @MBIM_UICC_SLOT_STATE_ACTIVE: The UICC slot is occupied and the card within it is ready.
+ * @MBIM_UICC_SLOT_STATE_ERROR: The UICC slot is occupied and powreed on but the card is in an error state and cannot be used until it is next reset.
+ * @MBIM_UICC_SLOT_STATE_ACTIVE_ESIM: The card in the slot is an eSIM with an active profile and is ready to accept commands.
+ * @MBIM_UICC_SLOT_STATE_ACTIVE_ESIM_NO_PROFILES: The card in the slot is an eSIM with no profiles(or no active profiles) and is ready to accept commands.
+ *
+ * MbimUiccSlotState
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_UICC_SLOT_STATE_UNKNOWN = 0,
+    MBIM_UICC_SLOT_SATE_OFF_EMPTY = 1,
+    MBIM_UICC_SLOT_STATE_OFF = 2,
+    MBIM_UICC_SLOT_STATE_EMPTY = 3,
+    MBIM_UICC_SLOT_STATE_NOT_READY = 4,
+    MBIM_UICC_SLOT_STATE_ACTIVE = 5,
+    MBIM_UICC_SLOT_STATE_ERROR = 6,
+    MBIM_UICC_SLOT_STATE_ACTIVE_ESIM = 7,
+    MBIM_UICC_SLOT_STATE_ACTIVE_ESIM_NO_PROFILES = 8
+} MbimUiccSlotState;
+
+/*****************************************************************************/
+/* 'UICC APDU' enums */
+
+/**
+ * MbimUiccSecureMessaging:
+ * @MBIM_UICC_SECURE_MESSAGING_NONE: No secure messaging.
+ * @MBIM_UICC_SECURE_MESSAGING_NO_HDR_AUTH: Secure, command header not authenticated.
+ *
+ * Specifies whether apdu is exchanged using secure messaging.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_UICC_SECURE_MESSAGING_NONE             = 0,
+    MBIM_UICC_SECURE_MESSAGING_NO_HDR_AUTH      = 1,
+} MbimUiccSecureMessaging;
+
+/**
+ * MbimUiccClassByteType:
+ * @MBIM_UICC_CLASS_BYTE_TYPE_INTER_INDUSTRY: Defined according to first interindustry definition in ISO 7816-4.
+ * @MBIM_UICC_CLASS_BYTE_TYPE_EXTENDED: Defined according to extended definition in ETSI 102 221.
+ *
+ * Specifies the type of class byte definition.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_UICC_CLASS_BYTE_TYPE_INTER_INDUSTRY   = 0,
+    MBIM_UICC_CLASS_BYTE_TYPE_EXTENDED         = 1,
+} MbimUiccClassByteType;
+
+/* 'UICC Reset' enums */
+
+/**
+ * MbimUiccPassThroughAction:
+ * @MBIM_UICC_PASS_THROUGH_ACTION_DISABLE: Disable pass through.
+ * @MBIM_UICC_PASS_THROUGH_ACTION_ENABLE: Enable pass through.
+ *
+ * Pass through actions host can specify to modem. Upon reset
+ * treats UICC as if pass through or as a regular UICC
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_UICC_PASS_THROUGH_ACTION_DISABLE     = 0,
+    MBIM_UICC_PASS_THROUGH_ACTION_ENABLE      = 1,
+} MbimUiccPassThroughAction;
+
+/**
+ * MbimUiccPassThroughStatus:
+ * @MBIM_UICC_PASS_THROUGH_STATUS_DISABLED: Pass through disabled.
+ * @MBIM_UICC_PASS_THROUGH_STATUS_ENABLED: Pass through enabled.
+ *
+ * Pass through status of the modem specifies to the host.
+ *
+ * Since: 1.26
+ */
+typedef enum { /*< since=1.26 >*/
+    MBIM_UICC_PASS_THROUGH_STATUS_DISABLED   = 0,
+    MBIM_UICC_PASS_THROUGH_STATUS_ENABLED    = 1,
+} MbimUiccPassThroughStatus;
+
+/*****************************************************************************/
+/* 'Modem Configuration' enums */
+
+/**
+ * MbimModemConfigurationStatus:
+ * @MBIM_MODEM_CONFIGURATION_STATUS_UNKNOWN: Unknown
+ * @MBIM_MODEM_CONFIGURATION_STATUS_STARTED: SIM is ready and configuration started.
+ * @MBIM_MODEM_CONFIGURATION_STATUS_COMPLETED: SIM is ready and configuration completed.
+ *
+ * Modem configuration status.
+ *
+ * Since: 1.28
+ */
+typedef enum {/*< since=1.28 >*/
+    MBIM_MODEM_CONFIGURATION_STATUS_UNKNOWN   = 0,
+    MBIM_MODEM_CONFIGURATION_STATUS_STARTED   = 1,
+    MBIM_MODEM_CONFIGURATION_STATUS_COMPLETED = 2
+} MbimModemConfigurationStatus;
+
+/*****************************************************************************/
+/* 'Packet service v2'  enums */
+
+/**
+ * MbimFrequencyRange:
+ * @MBIM_FREQUENCY_RANGE_UNKNOWN: Unknown.
+ * @MBIM_FREQUENCY_RANGE_1: Frequency range 1 (FR1) in 3GPP TS 38.101-1 (Sub-6G).
+ * @MBIM_FREQUENCY_RANGE_2: FR2 in 3GPP TS 38.101-2 (mmWave).
+ *
+ * Frequency Range.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_FREQUENCY_RANGE_UNKNOWN = 0,
+    MBIM_FREQUENCY_RANGE_1       = 1 << 0,
+    MBIM_FREQUENCY_RANGE_2       = 1 << 1
+} MbimFrequencyRange;
+
+/*****************************************************************************/
+/* 'Provisioned Context v2' enums */
+
+/**
+ * MbimContextRoamingControl:
+ * @MBIM_CONTEXT_ROAMING_CONTROL_HOME_ONLY: Context allowed to be used in home network.
+ * @MBIM_CONTEXT_ROAMING_CONTROL_PARTNER_ONLY: Context allowed to be used in partner network.
+ * @MBIM_CONTEXT_ROAMING_CONTROL_NON_PARTNER_ONLY: Context allowed to be used in non-partner network.
+ * @MBIM_CONTEXT_ROAMING_CONTROL_HOME_AND_PARTNER: Context allowed to be used in home and partner networks.
+ * @MBIM_CONTEXT_ROAMING_CONTROL_HOME_AND_NON_PARTNER: Context allowed to be used in home and non-partner networks.
+ * @MBIM_CONTEXT_ROAMING_CONTROL_PARTNER_AND_NON_PARTNER: Context allowed to be used in partner and non-partner networks.
+ * @MBIM_CONTEXT_ROAMING_CONTROL_ALLOW_ALL: Context allowed to be used in any roaming condition.
+ *
+ * Type of roaming control.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_CONTEXT_ROAMING_CONTROL_HOME_ONLY               = 0,
+    MBIM_CONTEXT_ROAMING_CONTROL_PARTNER_ONLY            = 1,
+    MBIM_CONTEXT_ROAMING_CONTROL_NON_PARTNER_ONLY        = 2,
+    MBIM_CONTEXT_ROAMING_CONTROL_HOME_AND_PARTNER        = 3,
+    MBIM_CONTEXT_ROAMING_CONTROL_HOME_AND_NON_PARTNER    = 4,
+    MBIM_CONTEXT_ROAMING_CONTROL_PARTNER_AND_NON_PARTNER = 5,
+    MBIM_CONTEXT_ROAMING_CONTROL_ALLOW_ALL               = 6
+} MbimContextRoamingControl;
+
+/**
+ * MbimContextMediaType:
+ * @MBIM_CONTEXT_MEDIA_TYPE_CELLULAR_ONLY: Context allowed to be used only wen registered over cellular.
+ * @MBIM_CONTEXT_MEDIA_TYPE_WIFI_ONLY: Context allowed to be used only when registered over Wi-Fi.
+ * @MBIM_CONTEXT_MEDIA_TYPE_ALL: Context allowed to be used when registered either over cellular or Wi-Fi.
+ *
+ * Media type, specifying whether the modem is used for cellular or
+ * iWLAN (Wi-Fi offload).
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_CONTEXT_MEDIA_TYPE_CELLULAR_ONLY = 0,
+    MBIM_CONTEXT_MEDIA_TYPE_WIFI_ONLY     = 1,
+    MBIM_CONTEXT_MEDIA_TYPE_ALL           = 2
+} MbimContextMediaType;
+
+/**
+ * MbimContextState:
+ * @MBIM_CONTEXT_STATE_DISABLED: Disabled.
+ * @MBIM_CONTEXT_STATE_ENABLED: Enabled.
+ *
+ * Status of the context, specifying whether it's enabled or disabled.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_CONTEXT_STATE_DISABLED = 0,
+    MBIM_CONTEXT_STATE_ENABLED  = 1,
+} MbimContextState;
+
+/**
+ * MbimContextOperation:
+ * @MBIM_CONTEXT_OPERATION_DEFAULT: Adds or replaces an existing context.
+ * @MBIM_CONTEXT_OPERATION_DELETE: Delete an existing context.
+ * @MBIM_CONTEXT_OPERATION_RESTORE_FACTORY: Restore preconfigured contexts for the provider ID of the current SIM card.
+ *
+ * Command to run when updating context configuration.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_CONTEXT_OPERATION_DEFAULT         = 0,
+    MBIM_CONTEXT_OPERATION_DELETE          = 1,
+    MBIM_CONTEXT_OPERATION_RESTORE_FACTORY = 2,
+} MbimContextOperation;
+
+/*****************************************************************************/
+/* 'Registration Parameters' enums */
+
+/**
+ * MbimMicoMode:
+ * @MBIM_MICO_MODE_DISABLED: Disabled.
+ * @MBIM_MICO_MODE_ENABLED: Enabled.
+ * @MBIM_MICO_MODE_UNSUPPORTED: Device does not support MICO mode.
+ * @MBIM_MICO_MODE_DEFAULT: Default.
+ *
+ * Mobile Initiated Connection Only (MICO) Mode state.
+ *
+ * The @MBIM_MICO_MODE_DEFAULT value should only be used in set operations, it
+ * should never be returned by the module upon a query.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_MICO_MODE_DISABLED    = 0,
+    MBIM_MICO_MODE_ENABLED     = 1,
+    MBIM_MICO_MODE_UNSUPPORTED = 2,
+    MBIM_MICO_MODE_DEFAULT     = 3,
+} MbimMicoMode;
+
+/**
+ * MbimDefaultPduActivationHint:
+ * @MBIM_DEFAULT_PDU_ACTIVATION_HINT_UNLIKELY: Default PDU session activation is unlikely to happen soon.
+ * @MBIM_DEFAULT_PDU_ACTIVATION_HINT_LIKELY: Default PDU session activation is likely to happen soon.
+ *
+ * Hint regarding the activation of the default PDU session.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_DEFAULT_PDU_ACTIVATION_HINT_UNLIKELY = 0,
+    MBIM_DEFAULT_PDU_ACTIVATION_HINT_LIKELY   = 1,
+} MbimDefaultPduActivationHint;
+
+/**
+ * MbimLadnInfo:
+ * @MBIM_LADN_INFO_NOT_NEEDED: Information not needed.
+ * @MBIM_LADN_INFO_REQUESTED: Information requested.
+ *
+ * Local Area Data Network (LADN) information state.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_LADN_INFO_NOT_NEEDED = 0,
+    MBIM_LADN_INFO_REQUESTED  = 1,
+} MbimLadnInfo;
+
+/**
+ * MbimDrxCycle:
+ * @MBIM_DRX_CYCLE_NOT_SPECIFIED: DRX cycle not specified.
+ * @MBIM_DRX_CYCLE_NOT_SUPPORTED: DRX cycle setting not supported.
+ * @MBIM_DRX_CYCLE_32: DRX cycle T=32.
+ * @MBIM_DRX_CYCLE_64: DRX cycle T=64.
+ * @MBIM_DRX_CYCLE_128: DRX cycle T=128.
+ * @MBIM_DRX_CYCLE_256: DRX cycle T=256.
+ *
+ * DRX cycle settings.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_DRX_CYCLE_NOT_SPECIFIED = 0,
+    MBIM_DRX_CYCLE_NOT_SUPPORTED = 1,
+    MBIM_DRX_CYCLE_32            = 2,
+    MBIM_DRX_CYCLE_64            = 3,
+    MBIM_DRX_CYCLE_128           = 4,
+    MBIM_DRX_CYCLE_256           = 5,
+} MbimDrxCycle;
+
+/*****************************************************************************/
+/* 'Subscriber Ready Status v3' enums */
+
+/**
+ * MbimSubscriberReadyStatusFlag:
+ * @MBIM_SUBSCRIBER_READY_STATUS_FLAG_NONE: None.
+ * @MBIM_SUBSCRIBER_READY_STATUS_FLAG_ESIM: Whether the SIM is an eSIM or not.
+ * @MBIM_SUBSCRIBER_READY_STATUS_FLAG_SIM_REMOVABILITY_KNOWN: Whether the SIM removability details are know or not.
+ * @MBIM_SUBSCRIBER_READY_STATUS_FLAG_SIM_REMOVABLE: Whether the SIM is removable or not, valid only if @MBIM_SUBSCRIBER_READY_STATUS_FLAG_SIM_REMOVABLITY_KNOWN is also given.
+ *
+ * Flags specifying SIM related details.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_SUBSCRIBER_READY_STATUS_FLAG_NONE                   = 0,
+    MBIM_SUBSCRIBER_READY_STATUS_FLAG_ESIM                   = 1 << 0,
+    MBIM_SUBSCRIBER_READY_STATUS_FLAG_SIM_REMOVABILITY_KNOWN = 1 << 1,
+    MBIM_SUBSCRIBER_READY_STATUS_FLAG_SIM_REMOVABLE          = 1 << 2,
+} MbimSubscriberReadyStatusFlag;
+
+/*****************************************************************************/
+/* 'Device Caps v3' and 'Base Stations Info v3' enums */
+
+/**
+ * MbimDataClassV3:
+ * @MBIM_DATA_CLASS_V3_NONE: None. Since 1.30.
+ * @MBIM_DATA_CLASS_V3_GPRS: GPRS.
+ * @MBIM_DATA_CLASS_V3_EDGE: EDGE.
+ * @MBIM_DATA_CLASS_V3_UMTS: UMTS.
+ * @MBIM_DATA_CLASS_V3_HSDPA: HSDPA.
+ * @MBIM_DATA_CLASS_V3_HSUPA: HSUPA.
+ * @MBIM_DATA_CLASS_V3_LTE: LTE.
+ * @MBIM_DATA_CLASS_V3_5G: 5G.
+ * @MBIM_DATA_CLASS_V3_1XRTT: 1xRTT.
+ * @MBIM_DATA_CLASS_V3_1XEVDO: 1xEV-DO.
+ * @MBIM_DATA_CLASS_V3_1XEVDO_REVA: 1xEV-DO RevA
+ * @MBIM_DATA_CLASS_V3_1XEVDV: 1xEV-DV.
+ * @MBIM_DATA_CLASS_V3_3XRTT: 3xRTT.
+ * @MBIM_DATA_CLASS_V3_1XEVDO_REVB: 1xEV-DO RevB.
+ * @MBIM_DATA_CLASS_V3_UMB: UMB.
+ * @MBIM_DATA_CLASS_V3_CUSTOM: Custom.
+ *
+ * Data class update in MBIMEx v3.0.
+ *
+ * There is now a single flag for 5G, and the new #MbimDataSubclass helps to
+ * identify the specific 5G setup.
+ *
+ * This type should be considered incompatible with #MbimDataClass.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_DATA_CLASS_V3_NONE        = 0,
+    MBIM_DATA_CLASS_V3_GPRS        = 1 << 0,
+    MBIM_DATA_CLASS_V3_EDGE        = 1 << 1,
+    MBIM_DATA_CLASS_V3_UMTS        = 1 << 2,
+    MBIM_DATA_CLASS_V3_HSDPA       = 1 << 3,
+    MBIM_DATA_CLASS_V3_HSUPA       = 1 << 4,
+    MBIM_DATA_CLASS_V3_LTE         = 1 << 5,
+    MBIM_DATA_CLASS_V3_5G          = 1 << 6,
+    /* Bit 7 unused, bits 8 to 15 reserved for future 3GPP classes */
+    MBIM_DATA_CLASS_V3_1XRTT       = 1 << 16,
+    MBIM_DATA_CLASS_V3_1XEVDO      = 1 << 17,
+    MBIM_DATA_CLASS_V3_1XEVDO_REVA = 1 << 18,
+    MBIM_DATA_CLASS_V3_1XEVDV      = 1 << 19,
+    MBIM_DATA_CLASS_V3_3XRTT       = 1 << 20,
+    MBIM_DATA_CLASS_V3_1XEVDO_REVB = 1 << 21,
+    MBIM_DATA_CLASS_V3_UMB         = 1 << 22,
+    /* Bits 23 to 30 reserved for future 3GPP2 classes */
+    MBIM_DATA_CLASS_V3_CUSTOM      = 1 << 31
+} MbimDataClassV3;
+
+/**
+ * MbimDataSubclass:
+ * @MBIM_DATA_SUBCLASS_NONE: No data subclass.
+ * @MBIM_DATA_SUBCLASS_5G_ENDC: EUTRAN and NR dual connectivity as in 5G option 3.
+ * @MBIM_DATA_SUBCLASS_5G_NR: Standalone NR as in 5G option 2.
+ * @MBIM_DATA_SUBCLASS_5G_NEDC: NR and EUTRAN dual connectivity as in 5G option 4.
+ * @MBIM_DATA_SUBCLASS_5G_ELTE: eLTE as in 5G option 5.
+ * @MBIM_DATA_SUBCLASS_5G_NGENDC: Next-gen eLTE and NR dual connectivity as in 5G option 7.
+ *
+ * Flags specifying the data subclass.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_DATA_SUBCLASS_NONE      = 0,
+    MBIM_DATA_SUBCLASS_5G_ENDC   = 1 << 0,
+    MBIM_DATA_SUBCLASS_5G_NR     = 1 << 1,
+    MBIM_DATA_SUBCLASS_5G_NEDC   = 1 << 2,
+    MBIM_DATA_SUBCLASS_5G_ELTE   = 1 << 3,
+    MBIM_DATA_SUBCLASS_5G_NGENDC = 1 << 4,
+} MbimDataSubclass;
+
+/*****************************************************************************/
+/* 'Quectel Radio State' enums */
+
+/**
+ * MbimQuectelRadioSwitchState:
+ * @MBIM_QUECTEL_RADIO_SWITCH_STATE_OFF: Radio is off.
+ * @MBIM_QUECTEL_RADIO_SWITCH_STATE_ON: Radio is on.
+ * @MBIM_QUECTEL_RADIO_SWITCH_STATE_FCC_LOCKED: Radio is FCC locked.
+ *
+ * Radio switch state.
+ *
+ * Since: 1.26.2
+ */
+typedef enum { /*< since=1.26.2 >*/
+    MBIM_QUECTEL_RADIO_SWITCH_STATE_OFF        = 0,
+    MBIM_QUECTEL_RADIO_SWITCH_STATE_ON         = 1,
+    MBIM_QUECTEL_RADIO_SWITCH_STATE_FCC_LOCKED = 4,
+} MbimQuectelRadioSwitchState;
+
+/*****************************************************************************/
+/* 'Serving Cell Information' */
+
+/**
+ * MbimIntelServingCellInfo:
+ * @MBIM_INTEL_SERVING_CELL_INFO_PCELL: Primary cell.
+ * @MBIM_INTEL_SERVING_CELL_INFO_SCELL: Secondary cell.
+ * @MBIM_INTEL_SERVING_CELL_INFO_PSCELL: Primary cell in SCS.
+ * @MBIM_INTEL_SERVING_CELL_INFO_SSCELL: Secondary cell in SCS.
+ * @MBIM_INTEL_SERVING_CELL_INFO_RADIO_OFF: Radio state is off.
+ *
+ * Serving cell information.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_INTEL_SERVING_CELL_INFO_PCELL     = 0,
+    MBIM_INTEL_SERVING_CELL_INFO_SCELL     = 1,
+    MBIM_INTEL_SERVING_CELL_INFO_PSCELL    = 2,
+    MBIM_INTEL_SERVING_CELL_INFO_SSCELL    = 3,
+    MBIM_INTEL_SERVING_CELL_INFO_RADIO_OFF = 0xFFFFFFFF,
+} MbimIntelServingCellInfo;
+
+/*****************************************************************************/
+/* 'Mbim Intel Boot Mode enums */
+
+/**
+ * MbimIntelBootMode:
+ * @MBIM_INTEL_BOOT_MODE_NORMAL_MODE: Normal boot mode.
+ * @MBIM_INTEL_BOOT_MODE_DOWNLOAD_MODE: Download boot mode.
+ * @MBIM_INTEL_BOOT_MODE_POWER_OFF_DEVICE: Power off device.
+ * @MBIM_INTEL_BOOT_MODE_NON_RESETABLE_REGISTER: Configure non-resetable register without reboot or power off.
+ * @MBIM_INTEL_BOOT_MODE_WITHOUT_REBOOT_POWER_OFF: Configure without reboot power-off.
+ * @MBIM_INTEL_BOOT_MODE_FAST_DOWNLOAD_MODE: Fast boot in download mode.
+ *
+ * Modem intel boot mode.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_INTEL_BOOT_MODE_NORMAL_MODE              = 0,
+    MBIM_INTEL_BOOT_MODE_DOWNLOAD_MODE            = 1,
+    MBIM_INTEL_BOOT_MODE_POWER_OFF_DEVICE         = 2,
+    MBIM_INTEL_BOOT_MODE_NON_RESETABLE_REGISTER   = 3,
+    MBIM_INTEL_BOOT_MODE_WITHOUT_REBOOT_POWER_OFF = 4,
+    MBIM_INTEL_BOOT_MODE_FAST_DOWNLOAD_MODE       = 5,
+} MbimIntelBootMode;
+
+/**
+ * MbimUiccApplicationType:
+ * @MBIM_UICC_APPLICATION_TYPE_UNKNOWN: Unknown.
+ * @MBIM_UICC_APPLICATION_TYPE_MF: Legacy SIM directories rooted at the MF.
+ * @MBIM_UICC_APPLICATION_TYPE_MF_SIM: Legacy SIM directories rooted at the DF_GSM.
+ * @MBIM_UICC_APPLICATION_TYPE_MF_RUIM: Legacy SIM directories rooted at the DF_CDMA.
+ * @MBIM_UICC_APPLICATION_TYPE_USIM: USIM application.
+ * @MBIM_UICC_APPLICATION_TYPE_CSIM: CSIM application.
+ * @MBIM_UICC_APPLICATION_TYPE_ISIM: ISIM application.
+ *
+ * Type of UICC application.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_UICC_APPLICATION_TYPE_UNKNOWN = 0,
+    MBIM_UICC_APPLICATION_TYPE_MF      = 1,
+    MBIM_UICC_APPLICATION_TYPE_MF_SIM  = 2,
+    MBIM_UICC_APPLICATION_TYPE_MF_RUIM = 3,
+    MBIM_UICC_APPLICATION_TYPE_USIM    = 4,
+    MBIM_UICC_APPLICATION_TYPE_CSIM    = 5,
+    MBIM_UICC_APPLICATION_TYPE_ISIM    = 6,
+} MbimUiccApplicationType;
+
+/**
+ * MbimUiccFileAccessibility:
+ * @MBIM_UICC_FILE_ACCESSIBILITY_UNKNOWN: Unknown.
+ * @MBIM_UICC_FILE_ACCESSIBILITY_NOT_SHAREABLE: Not shareable.
+ * @MBIM_UICC_FILE_ACCESSIBILITY_SHAREABLE: Shareable.
+ *
+ * The UICC file accessibility.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_UICC_FILE_ACCESSIBILITY_UNKNOWN       = 0,
+    MBIM_UICC_FILE_ACCESSIBILITY_NOT_SHAREABLE = 1,
+    MBIM_UICC_FILE_ACCESSIBILITY_SHAREABLE     = 2,
+} MbimUiccFileAccessibility;
+
+/**
+ * MbimUiccFileType:
+ * @MBIM_UICC_FILE_TYPE_UNKNOWN: Unknown.
+ * @MBIM_UICC_FILE_TYPE_WORKING_EF: Working EF.
+ * @MBIM_UICC_FILE_TYPE_INTERNAL_EF: Internal EF.
+ * @MBIM_UICC_FILE_TYPE_DF_OR_ADF: Dedicated file, DF or ADF.
+ *
+ * The UICC file type.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_UICC_FILE_TYPE_UNKNOWN     = 0,
+    MBIM_UICC_FILE_TYPE_WORKING_EF  = 1,
+    MBIM_UICC_FILE_TYPE_INTERNAL_EF = 2,
+    MBIM_UICC_FILE_TYPE_DF_OR_ADF   = 3,
+} MbimUiccFileType;
+
+/**
+ * MbimUiccFileStructure:
+ * @MBIM_UICC_FILE_STRUCTURE_UNKNOWN: Unknown.
+ * @MBIM_UICC_FILE_STRUCTURE_TRANSPARENT: A single record of variable length.
+ * @MBIM_UICC_FILE_STRUCTURE_CYCLIC: A cyclic set of records, each of the same length.
+ * @MBIM_UICC_FILE_STRUCTURE_LINEAR: A linear set of records, each of the same length.
+ * @MBIM_UICC_FILE_STRUCTURE_BER_TLV: A set of data values accessible by tag.
+ *
+ * The UICC file structure.
+ *
+ * Since: 1.28
+ */
+typedef enum { /*< since=1.28 >*/
+    MBIM_UICC_FILE_STRUCTURE_UNKNOWN     = 0,
+    MBIM_UICC_FILE_STRUCTURE_TRANSPARENT = 1,
+    MBIM_UICC_FILE_STRUCTURE_CYCLIC      = 2,
+    MBIM_UICC_FILE_STRUCTURE_LINEAR      = 3,
+    MBIM_UICC_FILE_STRUCTURE_BER_TLV     = 4,
+} MbimUiccFileStructure;
+
+/**
+ * MbimTraceCommand:
+ * @MBIM_TRACE_COMMAND_MODE: Trace command mode value.
+ * @MBIM_TRACE_COMMAND_LEVEL: Trace command level value.
+ * @MBIM_TRACE_COMMAND_LOCATION: Trace command location information.
+ * @MBIM_TRACE_COMMAND_FLASH_INTERVAL: Trace command flash interval information.
+ *
+ * The trace command value.
+ *
+ * Since: 1.30
+ */
+typedef enum { /*< since=1.30 >*/
+    MBIM_TRACE_COMMAND_MODE           = 0,
+    MBIM_TRACE_COMMAND_LEVEL          = 1,
+    MBIM_TRACE_COMMAND_LOCATION       = 2,
+    MBIM_TRACE_COMMAND_FLASH_INTERVAL = 3,
+} MbimTraceCommand;
+
+/*****************************************************************************/
+/* 'Google Carrier Lock' enums */
+
+/**
+ * MbimCarrierLockStatus:
+ * @MBIM_CARRIER_LOCK_STATUS_NOT_APPLIED: Carrier lock not applied.
+ * @MBIM_CARRIER_LOCK_STATUS_APPLIED: Carrier lock applied.
+ *
+ * Status of carrier lock.
+ *
+ * Since: 1.30
+ */
+typedef enum { /*< since=1.30 >*/
+    MBIM_CARRIER_LOCK_STATUS_NOT_APPLIED = 0,
+    MBIM_CARRIER_LOCK_STATUS_APPLIED     = 1,
+} MbimCarrierLockStatus;
+
+/**
+ * MbimCarrierLockModemState:
+ * @MBIM_CARRIER_LOCK_MODEM_STATE_DEREGISTERED: Modem deregistered.
+ * @MBIM_CARRIER_LOCK_MODEM_STATE_DEREGISTRATION_IN_PROGRESS: Modem de-registration in progress.
+ * @MBIM_CARRIER_LOCK_MODEM_STATE_REGISTRATION_IN_PROGRESS: Modem registration state in progress.
+ * @MBIM_CARRIER_LOCK_MODEM_STATE_REGISTERED: Modem registered.
+ *
+ * State of modem after a carrier lock state update.
+ *
+ * Since: 1.30
+ */
+typedef enum { /*< since=1.30 >*/
+    MBIM_CARRIER_LOCK_MODEM_STATE_DEREGISTERED               = 0,
+    MBIM_CARRIER_LOCK_MODEM_STATE_DEREGISTRATION_IN_PROGRESS = 1,
+    MBIM_CARRIER_LOCK_MODEM_STATE_REGISTRATION_IN_PROGRESS   = 2,
+    MBIM_CARRIER_LOCK_MODEM_STATE_REGISTERED                 = 3,
+} MbimCarrierLockModemState;
+
+/**
+ * MbimCarrierLockCause:
+ * @MBIM_CARRIER_LOCK_CAUSE_NOT_APPLICABLE: Cause not applicable.
+ * @MBIM_CARRIER_LOCK_CAUSE_SIM_LOCK_POLICY_MISMATCH: Sim lock policy mismatch.
+ * @MBIM_CARRIER_LOCK_CAUSE_SIM_LOCK_POLICY_MATCHED: Sim lock policy matched.
+ *
+ * Carrier lock cause.
+ *
+ * Since: 1.30
+ */
+typedef enum { /*< since=1.30 >*/
+    MBIM_CARRIER_LOCK_CAUSE_NOT_APPLICABLE           = 0,
+    MBIM_CARRIER_LOCK_CAUSE_SIM_LOCK_POLICY_MISMATCH = 1,
+    MBIM_CARRIER_LOCK_CAUSE_SIM_LOCK_POLICY_MATCHED  = 2,
+} MbimCarrierLockCause;
 
 G_END_DECLS
 

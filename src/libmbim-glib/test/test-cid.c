@@ -1,15 +1,6 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details:
- *
  * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
  */
 
@@ -121,6 +112,14 @@ test_cid_ms_host_shutdown (void)
                  TRUE, FALSE, FALSE);
 }
 
+static void
+test_cid_ms_sar (void)
+{
+    test_common (MBIM_SERVICE_MS_SAR,
+                 MBIM_CID_MS_SAR_CONFIG,
+                 TRUE, TRUE, TRUE);
+}
+
 int main (int argc, char **argv)
 {
     g_test_init (&argc, &argv, NULL);
@@ -134,6 +133,7 @@ int main (int argc, char **argv)
     g_test_add_func ("/libmbim-glib/cid/dss",              test_cid_dss);
     g_test_add_func ("/libmbim-glib/cid/ms-firmware-id",   test_cid_ms_firmware_id);
     g_test_add_func ("/libmbim-glib/cid/ms-host-shutdown", test_cid_ms_host_shutdown);
+    g_test_add_func ("/libmbim-glib/cid/ms-sar",           test_cid_ms_sar);
 
     return g_test_run ();
 }

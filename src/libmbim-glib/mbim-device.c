@@ -1,24 +1,11 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
- *
- * Copyright (C) 2013-2014 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2013-2021 Aleksander Morgado <aleksander@aleksander.es>
  * Copyright (C) 2014 Smith Micro Software, Inc.
+ * Copyright (C) 2021 Intel Corporation
  *
  * Implementation based on the 'QmiDevice' GObject from libqmi-glib.
  */
@@ -41,10 +28,6 @@
 #define OPEN_RETRY_TIMEOUT_SECS 5
 #define OPEN_CLOSE_TIMEOUT_SECS 2
 
-#if defined WITH_UDEV
-# include <gudev/gudev.h>
-#endif
-
 #include "mbim-common.h"
 #include "mbim-utils.h"
 #include "mbim-device.h"
@@ -52,8 +35,18 @@
 #include "mbim-message-private.h"
 #include "mbim-error-types.h"
 #include "mbim-enum-types.h"
+#include "mbim-helpers.h"
 #include "mbim-proxy.h"
 #include "mbim-proxy-control.h"
+#include "mbim-net-port-manager.h"
+#include "mbim-net-port-manager-wdm.h"
+#include "mbim-net-port-manager-wwan.h"
+#include "mbim-basic-connect.h"
+#include "mbim-ms-basic-connect-extensions.h"
+
+/* maximum number of printed data bytes when personal info
+ * should be hidden */
+#define MAX_PRINTED_BYTES 12
 
 static void async_initable_iface_init (GAsyncInitableIface *iface);
 
@@ -65,6 +58,7 @@ enum {
     PROP_FILE,
     PROP_TRANSACTION_ID,
     PROP_IN_SESSION,
+    PROP_CONSECUTIVE_TIMEOUTS,
     PROP_LAST
 };
 
@@ -98,6 +92,9 @@ struct _MbimDevicePrivate {
     gchar *path;
     gchar *path_display;
 
+    /* WWAN interface */
+    gchar *wwan_iface;
+
     /* I/O channel, set when the file is open */
     GIOChannel *iochannel;
     GSource *iochannel_source;
@@ -123,6 +120,16 @@ struct _MbimDevicePrivate {
 
     /* message size */
     guint16 max_control_transfer;
+
+    /* MBIM extensions major and minor versions agreed with the device */
+    guint8 ms_mbimex_version_major;
+    guint8 ms_mbimex_version_minor;
+
+    /* Link management */
+    MbimNetPortManager *net_port_manager;
+
+    /* Number of consecutive timeouts detected */
+    guint consecutive_timeouts;
 };
 
 #define MAX_SPAWN_RETRIES             10
@@ -227,13 +234,31 @@ transaction_task_complete_and_free (GTask        *task,
                                     const GError *error)
 {
     TransactionContext *ctx;
+    MbimDevice         *self;
 
-    ctx = g_task_get_task_data (task);
+    self = g_task_get_source_object (task);
+    ctx  = g_task_get_task_data (task);
 
     if (error) {
+        /* Increase number of consecutive timeouts */
+        if (g_error_matches (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_TIMEOUT) ||
+            g_error_matches (error, MBIM_PROTOCOL_ERROR, MBIM_PROTOCOL_ERROR_TIMEOUT_FRAGMENT)) {
+            self->priv->consecutive_timeouts++;
+            g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_CONSECUTIVE_TIMEOUTS]);
+            g_debug ("[%s] number of consecutive timeouts: %u",
+                     self->priv->path_display,
+                     self->priv->consecutive_timeouts);
+        }
         transaction_task_trace (task, "complete: error");
         g_task_return_error (task, g_error_copy (error));
     } else {
+        /* Reset number of consecutive timeouts */
+        if (self->priv->consecutive_timeouts > 0) {
+            g_debug ("[%s] reseted number of consecutive timeouts",
+                     self->priv->path_display);
+            self->priv->consecutive_timeouts = 0;
+            g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_CONSECUTIVE_TIMEOUTS]);
+        }
         transaction_task_trace (task, "complete: response");
         g_assert (ctx->fragments != NULL);
         g_task_return_pointer (task, mbim_message_ref (ctx->fragments), (GDestroyNotify) mbim_message_unref);
@@ -291,11 +316,11 @@ transaction_timed_out (TransactionWaitContext *wait_ctx)
     ctx->timeout_source = NULL;
 
     /* If no fragment was received, complete transaction with a timeout error */
-    if (!ctx->fragments)
+    if (!ctx->fragments) {
         error = g_error_new (MBIM_CORE_ERROR,
                              MBIM_CORE_ERROR_TIMEOUT,
                              "Transaction timed out");
-    else {
+    } else {
         /* Fragment timeout... */
         error = g_error_new (MBIM_PROTOCOL_ERROR,
                              MBIM_PROTOCOL_ERROR_TIMEOUT_FRAGMENT,
@@ -444,6 +469,364 @@ mbim_device_is_open (MbimDevice *self)
     return (self->priv->open_status == OPEN_STATUS_OPEN);
 }
 
+guint8
+mbim_device_get_ms_mbimex_version (MbimDevice *self,
+                                   guint8     *out_ms_mbimex_version_minor)
+{
+    g_return_val_if_fail (MBIM_IS_DEVICE (self), 0);
+
+    if (out_ms_mbimex_version_minor)
+        *out_ms_mbimex_version_minor = self->priv->ms_mbimex_version_minor;
+
+    return self->priv->ms_mbimex_version_major;
+}
+
+gboolean
+mbim_device_set_ms_mbimex_version (MbimDevice *self,
+                                   guint8      ms_mbimex_version_major,
+                                   guint8      ms_mbimex_version_minor,
+                                   GError    **error)
+{
+    g_return_val_if_fail (MBIM_IS_DEVICE (self), FALSE);
+
+    /* no checks that may make this method fail for now */
+    self->priv->ms_mbimex_version_major = ms_mbimex_version_major;
+    self->priv->ms_mbimex_version_minor = ms_mbimex_version_minor;
+    return TRUE;
+}
+
+gboolean
+mbim_device_check_ms_mbimex_version (MbimDevice *self,
+                                     guint8      ms_mbimex_version_major,
+                                     guint8      ms_mbimex_version_minor)
+{
+    g_return_val_if_fail (MBIM_IS_DEVICE (self), FALSE);
+
+    return ((self->priv->ms_mbimex_version_major > ms_mbimex_version_major) ||
+            ((self->priv->ms_mbimex_version_major == ms_mbimex_version_major) &&
+             (self->priv->ms_mbimex_version_minor >= ms_mbimex_version_minor)));
+}
+
+guint
+mbim_device_get_consecutive_timeouts (MbimDevice *self)
+{
+    g_return_val_if_fail (MBIM_IS_DEVICE (self), 0);
+
+    return self->priv->consecutive_timeouts;
+}
+
+/*****************************************************************************/
+
+static void
+reload_wwan_iface_name (MbimDevice *self)
+{
+    g_autofree gchar   *cdc_wdm_device_name = NULL;
+    guint               i;
+    g_autoptr(GError)   error = NULL;
+    static const gchar *driver_names[] = { "usbmisc", /* kernel >= 3.6 */
+                                           "usb" };   /* kernel < 3.6 */
+
+    g_clear_pointer (&self->priv->wwan_iface, g_free);
+
+    cdc_wdm_device_name = mbim_helpers_get_devname (self->priv->path, &error);
+    if (!cdc_wdm_device_name) {
+        g_warning ("[%s] invalid path for cdc-wdm control port: %s",
+                   self->priv->path_display,
+                   error->message);
+        return;
+    }
+
+    for (i = 0; i < G_N_ELEMENTS (driver_names) && !self->priv->wwan_iface; i++) {
+        g_autofree gchar           *sysfs_path = NULL;
+        g_autoptr(GFile)            sysfs_file = NULL;
+        g_autoptr(GFileEnumerator)  enumerator = NULL;
+        GFileInfo                  *file_info  = NULL;
+
+        /* WWAN iface name loading only applicable for cdc_mbim driver right now
+         * (so MBIM port exposed by the cdc-wdm driver in the usbmisc subsystem),
+         * not for any other subsystem or driver */
+        sysfs_path = g_strdup_printf ("/sys/class/%s/%s/device/net/", driver_names[i], cdc_wdm_device_name);
+        sysfs_file = g_file_new_for_path (sysfs_path);
+        enumerator = g_file_enumerate_children (sysfs_file,
+                                                G_FILE_ATTRIBUTE_STANDARD_NAME,
+                                                G_FILE_QUERY_INFO_NONE,
+                                                NULL,
+                                                NULL);
+        if (!enumerator)
+            continue;
+
+        /* Ignore errors when enumerating */
+        while ((file_info = g_file_enumerator_next_file (enumerator, NULL, NULL)) != NULL) {
+            const gchar *name;
+
+            name = g_file_info_get_name (file_info);
+            if (name) {
+                /* We only expect ONE file in the sysfs directory corresponding
+                 * to this control port, if more found for any reason, warn about it */
+                if (self->priv->wwan_iface)
+                    g_warning ("[%s] invalid additional wwan iface found: %s",
+                               self->priv->path_display, name);
+                else
+                    self->priv->wwan_iface = g_strdup (name);
+            }
+            g_object_unref (file_info);
+        }
+        if (!self->priv->wwan_iface)
+            g_warning ("[%s] wwan iface not found", self->priv->path_display);
+    }
+
+    /* wwan_iface won't be set at this point if the kernel driver in use isn't in
+     * the usbmisc subsystem */
+}
+
+static gboolean
+setup_net_port_manager (MbimDevice  *self,
+                        GError    **error)
+{
+    /* If we have a valid one already, use that one */
+    if (self->priv->net_port_manager)
+        return TRUE;
+
+    reload_wwan_iface_name (self);
+    if (!self->priv->wwan_iface)
+        /* If wwan_iface is not set wwan subsystem is probably in use */
+        self->priv->net_port_manager = MBIM_NET_PORT_MANAGER (mbim_net_port_manager_wwan_new (error));
+    else
+        self->priv->net_port_manager = MBIM_NET_PORT_MANAGER (mbim_net_port_manager_wdm_new (self->priv->wwan_iface, error));
+
+    return !!self->priv->net_port_manager;
+}
+
+/*****************************************************************************/
+/* Link management */
+
+typedef struct {
+    guint  session_id;
+    gchar *ifname;
+} AddLinkResult;
+
+static void
+add_link_result_free (AddLinkResult *ctx)
+{
+    g_free (ctx->ifname);
+    g_free (ctx);
+}
+
+gchar *
+mbim_device_add_link_finish (MbimDevice    *self,
+                             GAsyncResult  *res,
+                             guint         *session_id,
+                             GError       **error)
+{
+    AddLinkResult *ctx;
+    gchar         *ifname;
+
+    ctx = g_task_propagate_pointer (G_TASK (res), error);
+    if (!ctx)
+        return NULL;
+
+    if (session_id)
+        *session_id = ctx->session_id;
+
+    ifname = g_steal_pointer (&ctx->ifname);
+    add_link_result_free (ctx);
+    return ifname;
+}
+
+static void
+device_add_link_ready (MbimNetPortManager *net_port_manager,
+                       GAsyncResult      *res,
+                       GTask             *task)
+{
+    GError        *error = NULL;
+    AddLinkResult *ctx;
+
+    ctx = g_new0 (AddLinkResult, 1);
+    ctx->ifname = mbim_net_port_manager_add_link_finish (net_port_manager, &ctx->session_id, res, &error);
+
+    if (!ctx->ifname) {
+        g_prefix_error (&error, "Could not allocate link: ");
+        g_task_return_error (task, error);
+        add_link_result_free (ctx);
+    } else
+        g_task_return_pointer (task, ctx, (GDestroyNotify) add_link_result_free);
+
+    g_object_unref (task);
+}
+
+void
+mbim_device_add_link (MbimDevice          *self,
+                      guint                session_id,
+                      const gchar         *base_ifname,
+                      const gchar         *ifname_prefix,
+                      GCancellable        *cancellable,
+                      GAsyncReadyCallback  callback,
+                      gpointer             user_data)
+{
+    GTask  *task;
+    GError *error = NULL;
+
+    g_return_if_fail (MBIM_IS_DEVICE (self));
+    g_return_if_fail (base_ifname);
+    g_return_if_fail ((session_id <= MBIM_DEVICE_SESSION_ID_MAX) || (session_id == MBIM_DEVICE_SESSION_ID_AUTOMATIC));
+
+    task = g_task_new (self, cancellable, callback, user_data);
+
+    if (!setup_net_port_manager (self, &error)) {
+        g_task_return_error (task, error);
+        g_object_unref (task);
+        return;
+    }
+
+    g_assert (self->priv->net_port_manager);
+    mbim_net_port_manager_add_link (self->priv->net_port_manager,
+                                    session_id,
+                                    base_ifname,
+                                    ifname_prefix,
+                                    5,
+                                    cancellable,
+                                    (GAsyncReadyCallback) device_add_link_ready,
+                                    task);
+}
+
+gboolean
+mbim_device_delete_link_finish (MbimDevice    *self,
+                                GAsyncResult  *res,
+                                GError       **error)
+{
+    return g_task_propagate_boolean (G_TASK (res), error);
+}
+
+static void
+device_del_link_ready (MbimNetPortManager *net_port_manager,
+                       GAsyncResult       *res,
+                       GTask              *task)
+{
+    GError *error = NULL;
+
+    if (!mbim_net_port_manager_del_link_finish (net_port_manager, res, &error))
+        g_task_return_error (task, error);
+    else
+        g_task_return_boolean (task, TRUE);
+    g_object_unref (task);
+}
+
+void
+mbim_device_delete_link (MbimDevice          *self,
+                         const gchar         *ifname,
+                         GCancellable        *cancellable,
+                         GAsyncReadyCallback  callback,
+                         gpointer             user_data)
+{
+    GTask  *task;
+    GError *error = NULL;
+
+    g_return_if_fail (MBIM_IS_DEVICE (self));
+    g_return_if_fail (ifname);
+
+    task = g_task_new (self, cancellable, callback, user_data);
+
+    if (!setup_net_port_manager (self, &error)) {
+        g_task_return_error (task, error);
+        g_object_unref (task);
+        return;
+    }
+
+    g_assert (self->priv->net_port_manager);
+    mbim_net_port_manager_del_link (self->priv->net_port_manager,
+                                    ifname,
+                                    5, /* timeout */
+                                    cancellable,
+                                    (GAsyncReadyCallback) device_del_link_ready,
+                                    task);
+}
+
+/*****************************************************************************/
+
+gboolean
+mbim_device_delete_all_links_finish (MbimDevice    *self,
+                                     GAsyncResult  *res,
+                                     GError       **error)
+{
+    return g_task_propagate_boolean (G_TASK (res), error);
+}
+
+static void
+device_del_all_links_ready (MbimNetPortManager *net_port_manager,
+                            GAsyncResult       *res,
+                            GTask              *task)
+{
+    GError *error = NULL;
+
+    if (!mbim_net_port_manager_del_all_links_finish (net_port_manager, res, &error))
+        g_task_return_error (task, error);
+    else
+        g_task_return_boolean (task, TRUE);
+    g_object_unref (task);
+}
+
+void
+mbim_device_delete_all_links (MbimDevice          *self,
+                              const gchar         *base_ifname,
+                              GCancellable        *cancellable,
+                              GAsyncReadyCallback  callback,
+                              gpointer             user_data)
+{
+    GTask  *task;
+    GError *error = NULL;
+
+    g_return_if_fail (MBIM_IS_DEVICE (self));
+    g_return_if_fail (base_ifname);
+
+    task = g_task_new (self, cancellable, callback, user_data);
+
+    if (!setup_net_port_manager (self, &error)) {
+        g_task_return_error (task, error);
+        g_object_unref (task);
+        return;
+    }
+
+    g_assert (self->priv->net_port_manager);
+    mbim_net_port_manager_del_all_links (self->priv->net_port_manager,
+                                         base_ifname,
+                                         cancellable,
+                                         (GAsyncReadyCallback) device_del_all_links_ready,
+                                         task);
+}
+
+/*****************************************************************************/
+
+gboolean
+mbim_device_list_links (MbimDevice   *self,
+                        const gchar  *base_ifname,
+                        GPtrArray   **out_links,
+                        GError      **error)
+{
+    g_return_val_if_fail (MBIM_IS_DEVICE (self), FALSE);
+    g_return_val_if_fail (base_ifname, FALSE);
+
+    if (!setup_net_port_manager (self, error))
+        return FALSE;
+
+    g_assert (self->priv->net_port_manager);
+    return mbim_net_port_manager_list_links (self->priv->net_port_manager,
+                                             base_ifname,
+                                             out_links,
+                                             error);
+}
+
+/*****************************************************************************/
+
+gboolean
+mbim_device_check_link_supported (MbimDevice  *self,
+                                  GError     **error)
+{
+    g_return_val_if_fail (MBIM_IS_DEVICE (self), FALSE);
+
+    /* if we can setup a net port manager, link management is supported */
+    return setup_net_port_manager (self, error);
+}
+
 /*****************************************************************************/
 /* Open device */
 
@@ -455,10 +838,33 @@ indication_ready (MbimDevice   *self,
     g_autoptr(MbimMessage) indication = NULL;
 
     if (!(indication = g_task_propagate_pointer (G_TASK (res), &error))) {
-        g_debug ("[%s] Error processing indication message: %s",
+        g_debug ("[%s] error processing indication message: %s",
                  self->priv->path_display,
                  error->message);
         return;
+    }
+
+    /* Indications in the internal proxy control service are not emitted as
+     * signals, they're consumed internally */
+    {
+        guint16 mbim_version;
+        guint16 ms_mbimex_version;
+
+        if ((mbim_message_indicate_status_get_service (indication) == MBIM_SERVICE_PROXY_CONTROL) &&
+            (mbim_message_indicate_status_get_cid (indication) == MBIM_CID_PROXY_CONTROL_VERSION) &&
+            mbim_message_proxy_control_version_notification_parse (indication, &mbim_version, &ms_mbimex_version, NULL)) {
+
+            self->priv->ms_mbimex_version_major = (ms_mbimex_version >> 8) & 0xFF;
+            self->priv->ms_mbimex_version_minor = ms_mbimex_version & 0xFF;
+
+            g_debug ("[%s] version information update reported: version %x.%02x, extended version %x.%02x",
+                     self->priv->path_display,
+                     (mbim_version >> 8) & 0xFF,
+                     mbim_version & 0xFF,
+                     self->priv->ms_mbimex_version_major,
+                     self->priv->ms_mbimex_version_minor);
+            return;
+        }
     }
 
     g_signal_emit (self, signals[SIGNAL_INDICATE_STATUS], 0, indication);
@@ -502,10 +908,18 @@ process_message (MbimDevice        *self,
     if (mbim_utils_get_traces_enabled ()) {
         g_autofree gchar *printable = NULL;
 
-        printable = mbim_common_str_hex (((GByteArray *)message)->data,
-                                         ((GByteArray *)message)->len,
-                                         ':');
-        g_debug ("[%s] Received message...%s\n"
+        if (mbim_utils_get_show_personal_info () || (((GByteArray *)message)->len < MAX_PRINTED_BYTES)) {
+            printable = mbim_common_str_hex (((GByteArray *)message)->data,
+                                             ((GByteArray *)message)->len,
+                                             ':');
+        } else {
+            g_autofree gchar *tmp = NULL;
+
+            tmp = mbim_common_str_hex (((GByteArray *)message)->data, MAX_PRINTED_BYTES, ':');
+            printable = g_strdup_printf ("%s...", tmp);
+        }
+
+        g_debug ("[%s] received message...%s\n"
                  ">>>>>> RAW:\n"
                  ">>>>>>   length = %u\n"
                  ">>>>>>   data   = %s\n",
@@ -517,8 +931,13 @@ process_message (MbimDevice        *self,
         if (is_partial_fragment) {
             g_autofree gchar *translated = NULL;
 
-            translated = mbim_message_get_printable (message, ">>>>>> ", TRUE);
-            g_debug ("[%s] Received message fragment (translated)...\n%s",
+            translated = mbim_message_get_printable_full (message,
+                                                          self->priv->ms_mbimex_version_major,
+                                                          self->priv->ms_mbimex_version_minor,
+                                                          ">>>>>> ",
+                                                          TRUE,
+                                                          NULL);
+            g_debug ("[%s] received message fragment (translated)...\n%s",
                      self->priv->path_display,
                      translated);
         }
@@ -559,16 +978,24 @@ process_message (MbimDevice        *self,
                                                (MBIM_MESSAGE_GET_MESSAGE_TYPE (message) - 0x80000000),
                                                mbim_message_get_transaction_id (message));
             if (!task) {
-                g_autofree gchar *printable = NULL;
-
-                g_debug ("[%s] No transaction matched in received message",
+                g_debug ("[%s] no transaction matched in received message",
                          self->priv->path_display);
+
                 /* Attempt to print a user friendly dump of the packet anyway */
-                printable = mbim_message_get_printable (message, ">>>>>> ", is_partial_fragment);
-                if (printable)
-                    g_debug ("[%s] Received unexpected message (translated)...\n%s",
-                             self->priv->path_display,
-                             printable);
+                if (mbim_utils_get_traces_enabled ()) {
+                    g_autofree gchar *printable = NULL;
+
+                    printable = mbim_message_get_printable_full (message,
+                                                                 self->priv->ms_mbimex_version_major,
+                                                                 self->priv->ms_mbimex_version_minor,
+                                                                 ">>>>>> ",
+                                                                 is_partial_fragment,
+                                                                 NULL);
+                    if (printable)
+                        g_debug ("[%s] received unexpected message (translated)...\n%s",
+                                 self->priv->path_display,
+                                 printable);
+                }
 
                 /* If we're opening and we get a CLOSE_DONE message without any
                  * matched transaction, finalize the open request right away to
@@ -609,8 +1036,13 @@ process_message (MbimDevice        *self,
             if (mbim_utils_get_traces_enabled ()) {
                 g_autofree gchar *printable = NULL;
 
-                printable = mbim_message_get_printable (ctx->fragments, ">>>>>> ", FALSE);
-                g_debug ("[%s] Received message (translated)...\n%s",
+                printable = mbim_message_get_printable_full (ctx->fragments,
+                                                             self->priv->ms_mbimex_version_major,
+                                                             self->priv->ms_mbimex_version_minor,
+                                                             ">>>>>> ",
+                                                             FALSE,
+                                                             NULL);
+                g_debug ("[%s] received message (translated)...\n%s",
                          self->priv->path_display,
                          printable);
             }
@@ -632,30 +1064,35 @@ process_message (MbimDevice        *self,
         g_autoptr(GError)  error_indication = NULL;
         GTask             *task;
 
+        if (mbim_utils_get_traces_enabled ()) {
+            g_autofree gchar *printable = NULL;
+
+            printable = mbim_message_get_printable_full (message,
+                                                         self->priv->ms_mbimex_version_major,
+                                                         self->priv->ms_mbimex_version_minor,
+                                                         ">>>>>> ",
+                                                         FALSE,
+                                                         NULL);
+            g_debug ("[%s] received message (translated)...\n%s",
+                     self->priv->path_display,
+                     printable);
+        }
+
+        /* Build indication error before task completion, to ensure the message
+         * is valid */
+        error_indication = mbim_message_error_get_error (message);
+
         /* Try to match this transaction just per transaction ID */
         task = device_release_transaction (self,
                                            TRANSACTION_TYPE_HOST,
                                            MBIM_MESSAGE_TYPE_INVALID,
                                            mbim_message_get_transaction_id (message));
 
-        if (!task)
+        if (!task) {
             g_debug ("[%s] No transaction matched in received function error message",
                      self->priv->path_display);
 
-        if (mbim_utils_get_traces_enabled ()) {
-            g_autofree gchar *printable = NULL;
-
-            printable = mbim_message_get_printable (message, ">>>>>> ", FALSE);
-            g_debug ("[%s] Received message (translated)...\n%s",
-                     self->priv->path_display,
-                     printable);
-        }
-
-        /* Signals are emitted regardless of whether the transaction matched or not */
-        error_indication = mbim_message_error_get_error (message);
-        g_signal_emit (self, signals[SIGNAL_ERROR], 0, error_indication);
-
-        if (task) {
+        } else {
             TransactionContext *ctx;
 
             ctx = g_task_get_task_data (task);
@@ -665,6 +1102,12 @@ process_message (MbimDevice        *self,
             ctx->fragments = mbim_message_dup (message);
             transaction_task_complete_and_free (task, NULL);
         }
+
+        /* Signals are emitted regardless of whether the transaction matched or not;
+         * and emitted after the task completion, because the listeners of this
+         * signal may decide to force-close the device, which in turn clears the
+         * internal buffer and the MbimMessage. */
+        g_signal_emit (self, signals[SIGNAL_ERROR], 0, error_indication);
         return;
     }
 
@@ -681,53 +1124,32 @@ process_message (MbimDevice        *self,
     }
 }
 
-static gboolean
-validate_message_type (const MbimMessage *message)
-{
-    switch (mbim_message_get_message_type (message)) {
-        case MBIM_MESSAGE_TYPE_OPEN:
-        case MBIM_MESSAGE_TYPE_CLOSE:
-        case MBIM_MESSAGE_TYPE_COMMAND:
-        case MBIM_MESSAGE_TYPE_HOST_ERROR:
-        case MBIM_MESSAGE_TYPE_OPEN_DONE:
-        case MBIM_MESSAGE_TYPE_CLOSE_DONE:
-        case MBIM_MESSAGE_TYPE_COMMAND_DONE:
-        case MBIM_MESSAGE_TYPE_FUNCTION_ERROR:
-        case MBIM_MESSAGE_TYPE_INDICATE_STATUS:
-            return TRUE;
-        default:
-        case MBIM_MESSAGE_TYPE_INVALID:
-            return FALSE;
-    }
-}
-
 static void
 parse_response (MbimDevice *self)
 {
     do {
         const MbimMessage *message;
-        guint32            in_length;
-
-        /* If not even the MBIM header available, just return */
-        if (self->priv->response->len < 12)
-            return;
+        guint32            len;
+        g_autoptr(GError)  error = NULL;
 
         message = (const MbimMessage *)self->priv->response;
 
-        /* Fully ignore data that is clearly not a MBIM message */
-        if (!validate_message_type (message)) {
-            g_warning ("[%s] discarding %u bytes in MBIM stream as message type validation fails",
-                       self->priv->path_display, self->priv->response->len);
+        /* Invalid message? */
+        if (!_mbim_message_validate_internal (message, TRUE, &error)) {
+            /* No full message yet */
+            if (g_error_matches (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INCOMPLETE_MESSAGE))
+                return;
+
+            /* Invalid MBIM message */
+            g_warning ("[%s] discarding %u bytes in stream as message validation fails: %s",
+                       self->priv->path_display, self->priv->response->len,
+                       error->message);
             g_byte_array_remove_range (self->priv->response, 0, self->priv->response->len);
             return;
         }
 
-        /* No full message yet */
-        in_length = mbim_message_get_message_length (message);
-        if (self->priv->response->len < in_length)
-            return;
-
         /* Play with the received message */
+        len = mbim_message_get_message_length (message);
         process_message (self, message);
 
         /* If we were force-closed during the processing of a message, we'd be
@@ -736,7 +1158,7 @@ parse_response (MbimDevice *self)
             break;
 
         /* Remove message from buffer */
-        g_byte_array_remove_range (self->priv->response, 0, in_length);
+        g_byte_array_remove_range (self->priv->response, 0, len);
     } while (self->priv->response->len > 0);
 }
 
@@ -827,90 +1249,6 @@ struct usb_cdc_mbim_desc {
     guint8  bmNetworkCapabilities;
 } __attribute__ ((packed));
 
-#if defined WITH_UDEV
-
-static gchar *
-get_descriptors_filepath (MbimDevice *self)
-{
-    GUdevClient       *client;
-    GUdevDevice       *device = NULL;
-    GUdevDevice       *parent_device = NULL;
-    GUdevDevice       *grandparent_device = NULL;
-    g_autofree gchar  *descriptors_path = NULL;
-    g_autofree gchar  *device_basename = NULL;
-    g_autoptr(GError)  error = NULL;
-
-    client = g_udev_client_new (NULL);
-    if (!G_UDEV_IS_CLIENT (client)) {
-        g_warning ("[%s] Couldn't get udev client",
-                   self->priv->path_display);
-        goto out;
-    }
-
-    /* We need to get the sysfs of the cdc-wdm's grandfather:
-     *
-     *   * Device's sysfs path is like:
-     *      /sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.5/2-1.5:2.0/usbmisc/cdc-wdm0
-     *   * Parent's sysfs path is like:
-     *      /sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.5/2-1.5:2.0
-     *   * Grandparent's sysfs path is like:
-     *      /sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.5
-     *
-     *   Which is the one with the descriptors file.
-     */
-
-    device_basename = __mbim_utils_get_devname (self->priv->path, &error);
-    if (!device_basename) {
-        g_warning ("[%s] Invalid path for cdc-wdm control port: %s",
-                   self->priv->path_display, error->message);
-        goto out;
-    }
-
-    device = g_udev_client_query_by_subsystem_and_name (client, "usb", device_basename);
-    if (!device) {
-        device = g_udev_client_query_by_subsystem_and_name (client, "usbmisc", device_basename);
-        if (!device) {
-            /* possibly using a different driver instead of cdc_mbim */
-            g_debug ("[%s] Couldn't find udev device in usb/usbmisc subsystems",
-                     self->priv->path_display);
-            goto out;
-        }
-    }
-
-    parent_device = g_udev_device_get_parent (device);
-    if (!parent_device) {
-        g_warning ("[%s] Couldn't find parent udev device",
-                   self->priv->path_display);
-        goto out;
-    }
-
-    grandparent_device = g_udev_device_get_parent (parent_device);
-    if (!grandparent_device) {
-        g_warning ("[%s] Couldn't find grandparent udev device",
-                   self->priv->path_display);
-        goto out;
-    }
-
-    descriptors_path = g_build_path (G_DIR_SEPARATOR_S,
-                                     g_udev_device_get_sysfs_path (grandparent_device),
-                                     "descriptors",
-                                     NULL);
-
-out:
-    if (parent_device)
-        g_object_unref (parent_device);
-    if (grandparent_device)
-        g_object_unref (grandparent_device);
-    if (device)
-        g_object_unref (device);
-    if (client)
-        g_object_unref (client);
-
-    return g_steal_pointer (&descriptors_path);
-}
-
-#else
-
 static gchar *
 get_descriptors_filepath (MbimDevice *self)
 {
@@ -944,15 +1282,12 @@ get_descriptors_filepath (MbimDevice *self)
     }
 
     if (descriptors_path && !g_file_test (descriptors_path, G_FILE_TEST_EXISTS)) {
-        g_warning ("[%s] Descriptors file doesn't exist",
-                   self->priv->path_display);
+        g_warning ("[%s] descriptors file doesn't exist", self->priv->path_display);
         return NULL;
     }
 
     return g_steal_pointer (&descriptors_path);
 }
-
-#endif
 
 static guint16
 read_max_control_transfer (MbimDevice *self)
@@ -970,9 +1305,9 @@ read_max_control_transfer (MbimDevice *self)
         /* If descriptors file doesn't exist, it's probably because we're using
          * some other kernel driver, not the cdc_wdm/cdc_mbim pair, so fallback to
          * the default and avoid warning about it. */
-        g_debug ("[%s] Couldn't find descriptors file, possibly not using cdc_mbim",
+        g_debug ("[%s] couldn't find descriptors file, possibly not using cdc_mbim",
                  self->priv->path_display);
-        g_debug ("[%s] Fallback to default max control message size: %u",
+        g_debug ("[%s] fallback to default max control message size: %u",
                  self->priv->path_display, MAX_CONTROL_TRANSFER);
         return MAX_CONTROL_TRANSFER;
     }
@@ -981,7 +1316,7 @@ read_max_control_transfer (MbimDevice *self)
                               &contents,
                               &length,
                               &error)) {
-        g_warning ("[%s] Couldn't read descriptors file: %s",
+        g_warning ("[%s] couldn't read descriptors file: %s",
                    self->priv->path_display,
                    error->message);
         return MAX_CONTROL_TRANSFER;
@@ -995,7 +1330,7 @@ read_max_control_transfer (MbimDevice *self)
 
             /* Found! */
             max = GUINT16_FROM_LE (((struct usb_cdc_mbim_desc *)&contents[i])->wMaxControlMessage);
-            g_debug ("[%s] Read max control message size from descriptors file: %" G_GUINT16_FORMAT,
+            g_debug ("[%s] read max control message size from descriptors file: %" G_GUINT16_FORMAT,
                      self->priv->path_display,
                      max);
             return max;
@@ -1006,7 +1341,7 @@ read_max_control_transfer (MbimDevice *self)
         i += contents[i];
     }
 
-    g_warning ("[%s] Couldn't find MBIM signature in descriptors file",
+    g_warning ("[%s] couldn't find MBIM signature in descriptors file",
                self->priv->path_display);
     return MAX_CONTROL_TRANSFER;
 }
@@ -1095,14 +1430,14 @@ create_iochannel_with_fd (GTask *task)
 
     /* Query message size */
     if (ioctl (fd, IOCTL_WDM_MAX_COMMAND, &max) < 0) {
-        g_debug ("[%s] Couldn't query maximum message size: "
+        g_debug ("[%s] couldn't query maximum message size: "
                  "IOCTL_WDM_MAX_COMMAND failed: %s",
                  self->priv->path_display,
                  strerror (errno));
         /* Fallback, try to read the descriptor file */
         max = read_max_control_transfer (self);
     } else {
-        g_debug ("[%s] Queried max control message size: %" G_GUINT16_FORMAT,
+        g_debug ("[%s] queried max control message size: %" G_GUINT16_FORMAT,
                  self->priv->path_display,
                  max);
     }
@@ -1168,7 +1503,7 @@ create_iochannel_with_socket (GTask *task)
         g_auto(GStrv)      argc = NULL;
         g_autoptr(GSource) source = NULL;
 
-        g_debug ("cannot connect to proxy: %s", error->message);
+        g_debug ("[%s] cannot connect to proxy: %s", self->priv->path_display, error->message);
         g_clear_error (&error);
         g_clear_object (&self->priv->socket_client);
 
@@ -1183,7 +1518,7 @@ create_iochannel_with_socket (GTask *task)
             return;
         }
 
-        g_debug ("spawning new mbim-proxy (try %u)...", ctx->spawn_retries);
+        g_debug ("[%s] spawning new mbim-proxy (try %u)...", self->priv->path_display, ctx->spawn_retries);
 
         argc = g_new0 (gchar *, 2);
         argc[0] = g_strdup (LIBEXEC_PATH "/mbim-proxy");
@@ -1195,7 +1530,7 @@ create_iochannel_with_socket (GTask *task)
                             NULL, /* child_setup_user_data */
                             NULL,
                             &error)) {
-            g_debug ("error spawning mbim-proxy: %s", error->message);
+            g_debug ("[%s] error spawning mbim-proxy: %s", self->priv->path_display, error->message);
             g_clear_error (&error);
         }
 
@@ -1255,6 +1590,8 @@ typedef enum {
     DEVICE_OPEN_CONTEXT_STEP_FLAGS_PROXY,
     DEVICE_OPEN_CONTEXT_STEP_CLOSE_MESSAGE,
     DEVICE_OPEN_CONTEXT_STEP_OPEN_MESSAGE,
+    DEVICE_OPEN_CONTEXT_STEP_DEVICE_SERVICES,
+    DEVICE_OPEN_CONTEXT_STEP_MS_EXT_VERSION,
     DEVICE_OPEN_CONTEXT_STEP_LAST
 } DeviceOpenContextStep;
 
@@ -1273,8 +1610,6 @@ device_open_context_free (DeviceOpenContext *ctx)
     g_slice_free (DeviceOpenContext, ctx);
 }
 
-static void device_open_context_step (GTask *task);
-
 gboolean
 mbim_device_open_full_finish (MbimDevice    *self,
                               GAsyncResult  *res,
@@ -1291,7 +1626,167 @@ mbim_device_open_finish (MbimDevice   *self,
     return mbim_device_open_full_finish (self, res, error);
 }
 
-static void open_message (GTask *task);
+static void device_open_context_step (GTask *task);
+
+static void
+ms_ext_version_message_ready (MbimDevice   *self,
+                              GAsyncResult *res,
+                              GTask        *task)
+{
+    g_autoptr(MbimMessage)  response = NULL;
+    GError                 *error = NULL;
+    guint16                 mbim_version;
+    guint16                 ms_mbimex_version;
+    DeviceOpenContext      *ctx;
+
+    ctx = g_task_get_task_data (task);
+
+    response = mbim_device_command_finish (self, res, &error);
+    if (!response ||
+        !mbim_message_response_get_result (response, MBIM_MESSAGE_TYPE_COMMAND_DONE, &error) ||
+        !mbim_message_ms_basic_connect_extensions_v2_version_response_parse (
+            response,
+            &mbim_version,
+            &ms_mbimex_version,
+            &error)){
+        g_task_return_error (task, error);
+        g_object_unref (task);
+        return;
+    }
+
+    /* We fully ignore the MBIM version for now, we just assume it's 1.0, which
+     * is the only known release from the USB-IF for now. */
+    self->priv->ms_mbimex_version_major = (ms_mbimex_version >> 8) & 0xFF;
+    self->priv->ms_mbimex_version_minor = ms_mbimex_version & 0xFF;
+
+    g_debug ("[%s] successfully exchanged version information: version %x.%02x, extended version %x.%02x",
+             self->priv->path_display,
+             (mbim_version >> 8) & 0xFF,
+             mbim_version & 0xFF,
+             self->priv->ms_mbimex_version_major,
+             self->priv->ms_mbimex_version_minor);
+
+    ctx->step++;
+    device_open_context_step (task);
+}
+
+static void
+ms_ext_version_message (GTask *task)
+{
+    MbimDevice             *self;
+    DeviceOpenContext      *ctx;
+    g_autoptr(MbimMessage)  request = NULL;
+    guint32                 mbim_version = 0;
+    guint32                 ms_mbimex_version = 0;
+
+    self = g_task_get_source_object (task);
+    ctx = g_task_get_task_data (task);
+
+    if ((ctx->flags & MBIM_DEVICE_OPEN_FLAGS_MS_MBIMEX_V2) && (ctx->flags & MBIM_DEVICE_OPEN_FLAGS_MS_MBIMEX_V3)) {
+        g_task_return_new_error (task, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
+                                 "Cannot request both MBIMEx v2.0 and v3.0 at the same time");
+        g_object_unref (task);
+        return;
+    }
+
+    /* User requested MBIMEx 2.0 or 3.0, so we'll report it along with MBIM 1.0 */
+    mbim_version = 0x01 << 8 | 0x00;
+    if (ctx->flags & MBIM_DEVICE_OPEN_FLAGS_MS_MBIMEX_V2)
+        ms_mbimex_version = 0x02 << 8 | 0x00;
+    else if (ctx->flags & MBIM_DEVICE_OPEN_FLAGS_MS_MBIMEX_V3)
+        ms_mbimex_version = 0x03 << 8 | 0x00;
+    else
+        g_assert_not_reached ();
+
+    request = mbim_message_ms_basic_connect_extensions_v2_version_query_new (mbim_version, ms_mbimex_version, NULL);
+    g_assert (request);
+
+    mbim_device_command (self,
+                         request,
+                         ctx->timeout,
+                         g_task_get_cancellable (task),
+                         (GAsyncReadyCallback)ms_ext_version_message_ready,
+                         task);
+}
+
+static void
+device_services_message_ready (MbimDevice   *device,
+                               GAsyncResult *res,
+                               GTask        *task)
+{
+    g_autoptr(MbimMessage)                    response = NULL;
+    g_autoptr(MbimDeviceServiceElementArray)  device_services = NULL;
+    GError                                   *error = NULL;
+    guint32                                   device_services_count;
+    guint32                                   max_dss_sessions;
+    DeviceOpenContext                        *ctx;
+    guint                                     i;
+
+    ctx = g_task_get_task_data (task);
+
+    response = mbim_device_command_finish (device, res, &error);
+    if (!response ||
+        !mbim_message_response_get_result (response, MBIM_MESSAGE_TYPE_COMMAND_DONE, &error) ||
+        !mbim_message_device_services_response_parse (
+            response,
+            &device_services_count,
+            &max_dss_sessions,
+            &device_services,
+            &error)) {
+        g_task_return_error (task, error);
+        g_object_unref (task);
+        return;
+    }
+
+    if (device_services_count == 0) {
+        g_task_return_new_error (task, MBIM_CORE_ERROR, MBIM_CORE_ERROR_FAILED,
+                                 "No supported services reported by the modem");
+        g_object_unref (task);
+        return;
+    }
+
+    for (i = 0; i < device_services_count; i++) {
+        MbimService service;
+        guint32     j;
+
+        service = mbim_uuid_to_service (&device_services[i]->device_service_id);
+        for (j = 0; j < device_services[i]->cids_count; j++) {
+
+            if ((service == MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS) &&
+                device_services[i]->cids[j] == MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_VERSION) {
+                /* version command is supported, go on */
+                ctx->step++;
+                device_open_context_step (task);
+                return;
+            }
+        }
+    }
+
+    /* the version command isn't supported, so we can just jump to the end */
+    ctx->step = DEVICE_OPEN_CONTEXT_STEP_LAST;;
+    device_open_context_step (task);
+}
+
+static void
+device_services_message (GTask *task)
+{
+    MbimDevice             *self;
+    DeviceOpenContext      *ctx;
+    g_autoptr(MbimMessage)  request = NULL;
+
+    self = g_task_get_source_object (task);
+    ctx  = g_task_get_task_data (task);
+
+    request = mbim_message_device_services_query_new (NULL);
+    g_assert (request);
+
+    mbim_device_command (self,
+                         request,
+                         ctx->timeout,
+                         g_task_get_cancellable (task),
+                         (GAsyncReadyCallback)device_services_message_ready,
+                         task);
+}
 
 static void
 open_message_ready (MbimDevice   *self,
@@ -1323,7 +1818,7 @@ open_message_ready (MbimDevice   *self,
             return;
         }
 
-        g_debug ("error reported in open operation: closed");
+        g_debug ("[%s] error reported in open operation: closed", self->priv->path_display);
         self->priv->open_status = OPEN_STATUS_CLOSED;
         g_task_return_error (task, g_steal_pointer (&error));
         g_object_unref (task);
@@ -1331,7 +1826,7 @@ open_message_ready (MbimDevice   *self,
     }
 
     if (!mbim_message_response_get_result (response, MBIM_MESSAGE_TYPE_OPEN_DONE, &error)) {
-        g_debug ("getting open done result failed: closed");
+        g_debug ("[%s] getting open done result failed: closed", self->priv->path_display);
         self->priv->open_status = OPEN_STATUS_CLOSED;
         g_task_return_error (task, g_steal_pointer (&error));
         g_object_unref (task);
@@ -1376,9 +1871,9 @@ close_message_before_open_ready (MbimDevice   *self,
 
     response = mbim_device_command_finish (self, res, &error);
     if (!response)
-        g_debug ("error reported in close before open: %s (ignored)", error->message);
+        g_debug ("[%s] error reported in close before open: %s (ignored)", self->priv->path_display, error->message);
     else if (!mbim_message_response_get_result (response, MBIM_MESSAGE_TYPE_CLOSE_DONE, &error))
-        g_debug ("getting close done result failed: %s (ignored)", error->message);
+        g_debug ("[%s] getting close done result failed: %s (ignored)", self->priv->path_display, error->message);
 
     /* go on */
     ctx->step++;
@@ -1417,7 +1912,7 @@ proxy_cfg_message_ready (MbimDevice   *self,
     response = mbim_device_command_finish (self, res, &error);
     if (!response) {
         /* Hard error if proxy cfg command fails */
-        g_debug ("proxy configuration failed: closed");
+        g_debug ("[%s] proxy configuration failed: closed", self->priv->path_display);
         self->priv->open_status = OPEN_STATUS_CLOSED;
         g_task_return_error (task, error);
         g_object_unref (task);
@@ -1460,7 +1955,7 @@ create_iochannel_ready (MbimDevice   *self,
     GError            *error = NULL;
 
     if (!create_iochannel_finish (self, res, &error)) {
-        g_debug ("creating iochannel failed: closed");
+        g_debug ("[%s] creating iochannel failed: closed", self->priv->path_display);
         self->priv->open_status = OPEN_STATUS_CLOSED;
         g_task_return_error (task, error);
         g_object_unref (task);
@@ -1484,7 +1979,7 @@ device_open_context_step (GTask *task)
 
     /* Timed out? */
     if (g_timer_elapsed (ctx->timer, NULL) > ctx->timeout) {
-        g_debug ("open operation timed out: closed");
+        g_debug ("[%s] open operation timed out: closed", self->priv->path_display);
         self->priv->open_status = OPEN_STATUS_CLOSED;
         g_task_return_new_error (task,
                                  MBIM_CORE_ERROR,
@@ -1514,7 +2009,7 @@ device_open_context_step (GTask *task)
             return;
         }
 
-        g_debug ("opening device...");
+        g_debug ("[%s] opening device...", self->priv->path_display);
         g_assert (self->priv->open_status == OPEN_STATUS_CLOSED);
         self->priv->open_status = OPEN_STATUS_OPENING;
 
@@ -1550,6 +2045,22 @@ device_open_context_step (GTask *task)
         /* If the device is already in-session, avoid the open message */
         if (!self->priv->in_session) {
             open_message (task);
+            return;
+        }
+        ctx->step++;
+        /* Fall through */
+
+        case DEVICE_OPEN_CONTEXT_STEP_DEVICE_SERVICES:
+        if (ctx->flags & (MBIM_DEVICE_OPEN_FLAGS_MS_MBIMEX_V2 | MBIM_DEVICE_OPEN_FLAGS_MS_MBIMEX_V3)) {
+            device_services_message (task);
+            return;
+        }
+        ctx->step++;
+        /* Fall through */
+
+        case DEVICE_OPEN_CONTEXT_STEP_MS_EXT_VERSION:
+        if (ctx->flags & (MBIM_DEVICE_OPEN_FLAGS_MS_MBIMEX_V2 | MBIM_DEVICE_OPEN_FLAGS_MS_MBIMEX_V3)) {
+            ms_ext_version_message (task);
             return;
         }
         ctx->step++;
@@ -1621,8 +2132,6 @@ destroy_iochannel (MbimDevice  *self,
 {
     GError *inner_error = NULL;
 
-    self->priv->open_status = OPEN_STATUS_CLOSED;
-
     /* Already closed? */
     if (!self->priv->iochannel && !self->priv->socket_connection && !self->priv->socket_client)
         return TRUE;
@@ -1690,16 +2199,21 @@ close_message_ready (MbimDevice   *self,
                      GAsyncResult *res,
                      GTask        *task)
 {
-    g_autoptr(MbimMessage)  response = NULL;
-    GError                 *error = NULL;
+    g_autoptr(MbimMessage) response = NULL;
+    g_autoptr(GError)      error = NULL;
+    g_autoptr(GError)      iochannel_error = NULL;
 
     response = mbim_device_command_finish (self, res, &error);
-    if (!response)
-        g_task_return_error (task, error);
-    else if (!mbim_message_response_get_result (response, MBIM_MESSAGE_TYPE_CLOSE_DONE, &error))
-        g_task_return_error (task, error);
-    else if (!destroy_iochannel (self, &error))
-        g_task_return_error (task, error);
+    if (response)
+        mbim_message_response_get_result (response, MBIM_MESSAGE_TYPE_CLOSE_DONE, &error);
+
+    self->priv->open_status = OPEN_STATUS_CLOSED;
+    destroy_iochannel (self, &iochannel_error);
+
+    if (error)
+        g_task_return_error (task, g_steal_pointer (&error));
+    else if (iochannel_error)
+        g_task_return_error (task, g_steal_pointer (&iochannel_error));
     else
         g_task_return_boolean (task, TRUE);
     g_object_unref (task);
@@ -1724,17 +2238,33 @@ mbim_device_close (MbimDevice          *self,
     task = g_task_new (self, cancellable, callback, user_data);
     g_task_set_task_data (task, ctx, (GDestroyNotify)device_close_context_free);
 
-    /* Already closed? */
-    if (!self->priv->iochannel) {
+    /* If already closed, we're done */
+    if (self->priv->open_status == OPEN_STATUS_CLOSED) {
         g_task_return_boolean (task, TRUE);
         g_object_unref (task);
         return;
     }
 
+    /* If we're opening, fail with error. We could say we would abort the
+     * ongoing open attempt, but the way to abort that attempt is with the
+     * cancellable given in the open operation, not with an additional close.
+     */
+    if (self->priv->open_status == OPEN_STATUS_OPENING) {
+        g_task_return_new_error (
+            task, MBIM_CORE_ERROR, MBIM_CORE_ERROR_WRONG_STATE,
+            "Cannot close device: not yet fully open");
+        g_object_unref (task);
+        return;
+    }
+
+    g_debug ("[%s] closing device...", self->priv->path_display);
+    g_assert (self->priv->open_status == OPEN_STATUS_OPEN);
+
     /* If the device is in-session, avoid the close message */
     if (self->priv->in_session) {
         GError *error = NULL;
 
+        self->priv->open_status = OPEN_STATUS_CLOSED;
         if (!destroy_iochannel (self, &error))
             g_task_return_error (task, error);
         else
@@ -1849,8 +2379,16 @@ device_send (MbimDevice   *self,
         g_autofree gchar *hex = NULL;
         g_autofree gchar *printable = NULL;
 
-        hex = mbim_common_str_hex (raw_message, raw_message_len, ':');
-        g_debug ("[%s] Sent message...\n"
+        if (mbim_utils_get_show_personal_info () || (raw_message_len < MAX_PRINTED_BYTES)) {
+            hex = mbim_common_str_hex (raw_message, raw_message_len, ':');
+        } else {
+            g_autofree gchar *tmp = NULL;
+
+            tmp = mbim_common_str_hex (raw_message, MAX_PRINTED_BYTES, ':');
+            hex = g_strdup_printf ("%s...", tmp);
+        }
+
+        g_debug ("[%s] sent message...\n"
                  "<<<<<< RAW:\n"
                  "<<<<<<   length = %u\n"
                  "<<<<<<   data   = %s\n",
@@ -1858,8 +2396,13 @@ device_send (MbimDevice   *self,
                  ((GByteArray *)message)->len,
                  hex);
 
-        printable = mbim_message_get_printable (message, "<<<<<< ", FALSE);
-        g_debug ("[%s] Sent message (translated)...\n%s",
+        printable = mbim_message_get_printable_full (message,
+                                                     self->priv->ms_mbimex_version_major,
+                                                     self->priv->ms_mbimex_version_minor,
+                                                     "<<<<<< ",
+                                                     FALSE,
+                                                     NULL);
+        g_debug ("[%s] sent message (translated)...\n%s",
                  self->priv->path_display,
                  printable);
     }
@@ -1873,53 +2416,51 @@ device_send (MbimDevice   *self,
 
     fragments = _mbim_message_split_fragments (message, MAX_CONTROL_TRANSFER, &n_fragments);
     for (i = 0; i < n_fragments; i++) {
-        if (mbim_utils_get_traces_enabled ()) {
-            g_autoptr(GByteArray)  bytearray = NULL;
-            g_autofree gchar      *printable = NULL;
-            g_autofree gchar      *printable_h = NULL;
-            g_autofree gchar      *printable_fh = NULL;
-            g_autofree gchar      *printable_d = NULL;
+        g_autoptr(GByteArray)  full_fragment = NULL;
+        g_autofree gchar      *printable_headers = NULL;
 
-            printable_h  = mbim_common_str_hex (&fragments[i].header, sizeof (fragments[i].header), ':');
-            printable_fh = mbim_common_str_hex (&fragments[i].fragment_header, sizeof (fragments[i].fragment_header), ':');
-            printable_d  = mbim_common_str_hex (fragments[i].data, fragments[i].data_length, ':');
-            g_debug ("[%s] Sent fragment (%u)...\n"
+        /* Build compiled fragment headers */
+        full_fragment = g_byte_array_new ();
+        g_byte_array_append (full_fragment, (guint8 *)&fragments[i].header, sizeof (fragments[i].header));
+        g_byte_array_append (full_fragment, (guint8 *)&fragments[i].fragment_header, sizeof (fragments[i].fragment_header));
+
+        /* Build placeholder message with only headers for printable purposes only */
+        if (mbim_utils_get_traces_enabled ())
+            printable_headers = mbim_message_get_printable_full ((MbimMessage *)full_fragment,
+                                                                 self->priv->ms_mbimex_version_major,
+                                                                 self->priv->ms_mbimex_version_minor,
+                                                                 "<<<<<< ",
+                                                                 TRUE,
+                                                                 NULL);
+
+        /* Append the actual fragment data */
+        g_byte_array_append (full_fragment, (guint8 *)fragments[i].data, fragments[i].data_length);
+
+        if (mbim_utils_get_traces_enabled ()) {
+            g_autofree gchar *printable_full = NULL;
+
+            printable_full  = mbim_common_str_hex ((const guint8 *)full_fragment->data, full_fragment->len, ':');
+            g_debug ("[%s] sent fragment (%u)...\n"
                      "<<<<<< RAW:\n"
                      "<<<<<<   length = %u\n"
-                     "<<<<<<   data   = %s%s%s\n",
+                     "<<<<<<   data   = %s\n",
                      self->priv->path_display, i,
-                     (guint)(sizeof (fragments[i].header) +
-                             sizeof (fragments[i].fragment_header) +
-                             fragments[i].data_length),
-                     printable_h, printable_fh, printable_d);
+                     full_fragment->len,
+                     printable_full);
 
-            /* Dummy message for printable purposes only */
-            bytearray = g_byte_array_new ();
-            g_byte_array_append (bytearray, (guint8 *)&fragments[i].header, sizeof (fragments[i].header));
-            g_byte_array_append (bytearray, (guint8 *)&fragments[i].fragment_header, sizeof (fragments[i].fragment_header));
-            printable = mbim_message_get_printable ((MbimMessage *)bytearray, "<<<<<< ", TRUE);
-            g_debug ("[%s] Sent fragment (translated)...\n%s",
+            g_debug ("[%s] sent fragment (translated)...\n%s",
                      self->priv->path_display,
-                     printable);
+                     printable_headers);
         }
 
-        /* Write fragment headers */
+        /* Write whole packet to MBIM device.
+         * Here send whole packet rather than seperated elements, such as header,
+         * fragment_header, data, because some MBIM devices may have errors on
+         * seperated fragment case, such as "MBIM protocol error: LengthMismatch"
+         */
         if (!device_write (self,
-                           (guint8 *)&fragments[i].header,
-                           sizeof (fragments[i].header),
-                           error))
-            return FALSE;
-
-        if (!device_write (self,
-                           (guint8 *)&fragments[i].fragment_header,
-                           sizeof (fragments[i].fragment_header),
-                           error))
-            return FALSE;
-
-        /* Write fragment data */
-        if (!device_write (self,
-                           fragments[i].data,
-                           fragments[i].data_length,
+                           (guint8 *)full_fragment->data,
+                           full_fragment->len,
                            error))
             return FALSE;
     }
@@ -1951,7 +2492,7 @@ device_report_error_in_idle (ReportErrorContext *ctx)
         g_autoptr(GError) error = NULL;
 
         if (!device_send (ctx->self, ctx->message, &error))
-            g_warning ("[%s] Couldn't send host error message: %s",
+            g_warning ("[%s] couldn't send host error message: %s",
                        ctx->self->priv->path_display,
                        error->message);
     }
@@ -2185,6 +2726,9 @@ set_property (GObject      *object,
     case PROP_IN_SESSION:
         self->priv->in_session = g_value_get_boolean (value);
         break;
+    case PROP_CONSECUTIVE_TIMEOUTS:
+        g_assert_not_reached ();
+        break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
         break;
@@ -2209,6 +2753,9 @@ get_property (GObject    *object,
     case PROP_IN_SESSION:
         g_value_set_boolean (value, self->priv->in_session);
         break;
+    case PROP_CONSECUTIVE_TIMEOUTS:
+        g_value_set_uint (value, self->priv->consecutive_timeouts);
+        break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
         break;
@@ -2225,6 +2772,9 @@ mbim_device_init (MbimDevice *self)
     /* Initialize transaction ID */
     self->priv->transaction_id = 0x01;
     self->priv->open_status = OPEN_STATUS_CLOSED;
+
+    /* By default, assume v1.0 supported */
+    self->priv->ms_mbimex_version_major = 0x01;
 }
 
 static void
@@ -2234,7 +2784,9 @@ dispose (GObject *object)
 
     g_clear_object (&self->priv->file);
 
+    self->priv->open_status = OPEN_STATUS_CLOSED;
     destroy_iochannel (self, NULL);
+    g_clear_object (&self->priv->net_port_manager);
 
     G_OBJECT_CLASS (mbim_device_parent_class)->dispose (object);
 }
@@ -2257,6 +2809,7 @@ finalize (GObject *object)
 
     g_free (self->priv->path);
     g_free (self->priv->path_display);
+    g_free (self->priv->wwan_iface);
 
     G_OBJECT_CLASS (mbim_device_parent_class)->finalize (object);
 }
@@ -2309,7 +2862,7 @@ mbim_device_class_init (MbimDeviceClass *klass)
     g_object_class_install_property (object_class, PROP_TRANSACTION_ID, properties[PROP_TRANSACTION_ID]);
 
     /**
-     * MbimDevice:in-session
+     * MbimDevice:device-in-session
      *
      * Since: 1.4
      */
@@ -2320,6 +2873,19 @@ mbim_device_class_init (MbimDeviceClass *klass)
                               FALSE,
                               G_PARAM_READWRITE);
     g_object_class_install_property (object_class, PROP_IN_SESSION, properties[PROP_IN_SESSION]);
+
+    /**
+     * MbimDevice:device-consecutive-timeouts:
+     *
+     * Since: 1.28
+     */
+    properties[PROP_CONSECUTIVE_TIMEOUTS] =
+        g_param_spec_uint (MBIM_DEVICE_CONSECUTIVE_TIMEOUTS,
+                           "Consecutive timeouts",
+                           "Number of consecutive timeouts detected in requests sent to the device",
+                           0, G_MAXUINT, 0,
+                           G_PARAM_READABLE);
+    g_object_class_install_property (object_class, PROP_CONSECUTIVE_TIMEOUTS, properties[PROP_CONSECUTIVE_TIMEOUTS]);
 
   /**
    * MbimDevice::device-indicate-status:

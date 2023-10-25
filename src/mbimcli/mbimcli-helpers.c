@@ -1,19 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * mbimcli -- Command line interface to control MBIM devices
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Copyright (C) 2014 Aleksander Morgado <aleksander@aleksander.es>
  */
@@ -46,6 +34,134 @@ mbimcli_read_uint_from_string (const gchar *str,
         return TRUE;
     }
     return FALSE;
+}
+
+gboolean
+mbimcli_read_uint_from_bcd_string (const gchar *str,
+                                   guint       *out)
+{
+    gulong num;
+
+    if (!str || !str[0])
+        return FALSE;
+
+    /* in bcd, only numeric values (0-9) */
+    for (num = 0; str[num]; num++) {
+        if (!g_ascii_isdigit (str[num]))
+            return FALSE;
+    }
+
+    /* for the numeric values of str, we can just read the string as hex
+     * (base 16) and it will be valid bcd */
+    errno = 0;
+    num = strtoul (str, NULL, 16);
+    if (!errno && num <= G_MAXUINT) {
+        *out = (guint)num;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+gboolean
+mbimcli_read_uint8_from_bcd_string (const gchar *str,
+                                    guint8      *out)
+{
+    guint num;
+
+    if (!mbimcli_read_uint_from_bcd_string (str, &num) || (num > G_MAXUINT8))
+        return FALSE;
+
+    *out = (guint8)num;
+    return TRUE;
+}
+
+gboolean
+mbimcli_read_boolean_from_string (const gchar *value,
+                                  gboolean    *out)
+{
+    if (!g_ascii_strcasecmp (value, "true") || g_str_equal (value, "1") || !g_ascii_strcasecmp (value, "yes")) {
+        *out = TRUE;
+        return TRUE;
+    }
+
+    if (!g_ascii_strcasecmp (value, "false") || g_str_equal (value, "0") || !g_ascii_strcasecmp (value, "no")) {
+        *out = FALSE;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+/* Based on ModemManager's mm_utils_hexstr2bin() */
+
+static gint
+hex2num (gchar c)
+{
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    return -1;
+}
+
+static gint
+hex2byte (const gchar *hex)
+{
+    gint a, b;
+
+    a = hex2num (*hex++);
+    if (a < 0)
+        return -1;
+    b = hex2num (*hex++);
+    if (b < 0)
+        return -1;
+    return (a << 4) | b;
+}
+
+guint8 *
+mbimcli_read_buffer_from_string (const gchar  *hex,
+                                 gssize        len,
+                                 gsize        *out_len,
+                                 GError      **error)
+{
+    const gchar *ipos = hex;
+    g_autofree guint8 *buf = NULL;
+    gssize i;
+    gint a;
+    guint8 *opos;
+
+    if (len < 0)
+        len = strlen (hex);
+
+    if (len == 0) {
+        g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_FAILED,
+                     "Hex conversion failed: empty string");
+        return NULL;
+    }
+
+    /* Length must be a multiple of 2 */
+    if ((len % 2) != 0) {
+        g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_FAILED,
+                     "Hex conversion failed: invalid input length");
+        return NULL;
+    }
+
+    opos = buf = g_malloc0 (len / 2);
+    for (i = 0; i < len; i += 2) {
+        a = hex2byte (ipos);
+        if (a < 0) {
+            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_FAILED,
+                         "Hex byte conversion from '%c%c' failed",
+                         ipos[0], ipos[1]);
+            return NULL;
+        }
+        *opos++ = (guint8)a;
+        ipos += 2;
+    }
+    *out_len = len / 2;
+    return g_steal_pointer (&buf);
 }
 
 gboolean
@@ -330,3 +446,86 @@ mbimcli_parse_key_value_string (const gchar                 *str,
 
     return TRUE;
 }
+
+gboolean
+mbimcli_parse_sar_config_state_array (const gchar  *str,
+                                      GPtrArray   **out)
+{
+    g_autoptr(GPtrArray)  config_state_array = NULL;
+    g_autoptr(GRegex)     regex = NULL;
+    g_autoptr(GMatchInfo) match_info = NULL;
+    g_autoptr(GError)     inner_error = NULL;
+
+    config_state_array = g_ptr_array_new_with_free_func (g_free);
+
+    if (!str || !str[0]) {
+        *out = NULL;
+        return TRUE;
+    }
+
+    regex = g_regex_new ("\\s*{\\s*(\\d+|all)\\s*,\\s*(\\d+)\\s*}(?:\\s*,)?", G_REGEX_RAW, 0, NULL);
+    g_assert (regex);
+
+    g_regex_match_full (regex, str, strlen (str), 0, 0, &match_info, &inner_error);
+    while (!inner_error && g_match_info_matches (match_info)) {
+        g_autofree MbimSarConfigState *config_state = NULL;
+        g_autofree gchar              *antenna_index_str = NULL;
+        g_autofree gchar              *backoff_index_str = NULL;
+
+        config_state = g_new (MbimSarConfigState, 1);
+
+        antenna_index_str = g_match_info_fetch (match_info, 1);
+        backoff_index_str = g_match_info_fetch (match_info, 2);
+
+        if (g_ascii_strcasecmp (antenna_index_str, "all") == 0)
+            config_state->antenna_index = 0xFFFFFFFF;
+        else if (!mbimcli_read_uint_from_string (antenna_index_str, &config_state->antenna_index)) {
+            g_printerr ("error: invalid antenna index: '%s'\n", antenna_index_str);
+            return FALSE;
+        }
+        if (!mbimcli_read_uint_from_string (backoff_index_str, &config_state->backoff_index)) {
+            g_printerr ("error: invalid backoff index: '%s'\n", backoff_index_str);
+            return FALSE;
+        }
+
+        g_ptr_array_add (config_state_array, g_steal_pointer (&config_state));
+        g_match_info_next (match_info, &inner_error);
+    }
+
+    if (inner_error) {
+        g_printerr ("error: couldn't match config state array: %s\n", inner_error->message);
+        return FALSE;
+    }
+
+    if (config_state_array->len == 0) {
+        g_printerr ("error: no elements found in the array\n");
+        return FALSE;
+    }
+
+    *out = (config_state_array->len > 0) ? g_steal_pointer (&config_state_array) : NULL;
+    return TRUE;
+}
+
+#define MBIMCLI_ENUM_LIST_ITEM(TYPE,TYPE_UNDERSCORE,DESCR)                    \
+    gboolean                                                                  \
+    mbimcli_read_## TYPE_UNDERSCORE ##_from_string (const gchar *str,         \
+                                                    TYPE *out)                \
+    {                                                                         \
+        GType type;                                                           \
+        GEnumClass *enum_class;                                               \
+        GEnumValue *enum_value;                                               \
+                                                                              \
+        type = mbim_## TYPE_UNDERSCORE ##_get_type ();                         \
+        enum_class = G_ENUM_CLASS (g_type_class_ref (type));                  \
+        enum_value = g_enum_get_value_by_nick (enum_class, str);              \
+                                                                              \
+        if (enum_value)                                                       \
+            *out = (TYPE)enum_value->value;                                   \
+        else                                                                  \
+            g_printerr ("error: invalid " DESCR " value given: '%s'\n", str); \
+                                                                              \
+        g_type_class_unref (enum_class);                                      \
+        return !!enum_value;                                                  \
+    }
+MBIMCLI_ENUM_LIST
+#undef MBIMCLI_ENUM_LIST_ITEM
