@@ -1,21 +1,10 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * mbimcli -- Command line interface to control MBIM devices
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2013 - 2023 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2022 Intel Corporation
  */
 
 #include "config.h"
@@ -49,11 +38,15 @@ static gboolean operation_status;
 /* Main options */
 static gchar *device_str;
 static gboolean device_open_proxy_flag;
+static gboolean device_open_ms_mbimex_v2_flag;
+static gboolean device_open_ms_mbimex_v3_flag;
 static gchar *no_open_str;
 static gboolean no_close_flag;
 static gboolean noop_flag;
 static gboolean verbose_flag;
+static gboolean verbose_full_flag;
 static gboolean silent_flag;
+static gchar *printable_str;
 static gboolean version_flag;
 
 static GOptionEntry main_entries[] = {
@@ -63,6 +56,14 @@ static GOptionEntry main_entries[] = {
     },
     { "device-open-proxy", 'p', 0, G_OPTION_ARG_NONE, &device_open_proxy_flag,
       "Request to use the 'mbim-proxy' proxy",
+      NULL
+    },
+    { "device-open-ms-mbimex-v2", 0, 0, G_OPTION_ARG_NONE, &device_open_ms_mbimex_v2_flag,
+      "Request to enable Microsoft MBIMEx v2.0 support",
+      NULL
+    },
+    { "device-open-ms-mbimex-v3", 0, 0, G_OPTION_ARG_NONE, &device_open_ms_mbimex_v3_flag,
+      "Request to enable Microsoft MBIMEx v3.0 support",
       NULL
     },
     { "no-open", 0, 0, G_OPTION_ARG_STRING, &no_open_str,
@@ -81,15 +82,23 @@ static GOptionEntry main_entries[] = {
       "Run action with verbose logs, including the debug ones",
       NULL
     },
+    { "verbose-full", 0, 0, G_OPTION_ARG_NONE, &verbose_full_flag,
+      "Run action with verbose logs, including the debug ones and personal info",
+      NULL
+    },
     { "silent", 0, 0, G_OPTION_ARG_NONE, &silent_flag,
       "Run action with no logs; not even the error/warning ones",
       NULL
+    },
+    { "printable", 0, 0, G_OPTION_ARG_STRING, &printable_str,
+      "Get the printable info of the given hex encoded MBIM message",
+      "[(Data)]"
     },
     { "version", 'V', 0, G_OPTION_ARG_NONE, &version_flag,
       "Print version",
       NULL
     },
-    { NULL }
+    { NULL, 0, 0, 0, NULL, NULL, NULL }
 };
 
 static gboolean
@@ -163,7 +172,7 @@ log_handler (const gchar *log_domain,
         g_assert_not_reached ();
     }
 
-    if (!verbose_flag && !err)
+    if (!verbose_flag && !verbose_full_flag && !err)
         return;
 
     g_fprintf (err ? stderr : stdout,
@@ -178,11 +187,45 @@ static void
 print_version_and_exit (void)
 {
     g_print (PROGRAM_NAME " " PROGRAM_VERSION "\n"
-             "Copyright (C) 2013-2020 Aleksander Morgado\n"
+             "Copyright (C) 2013-2023 Aleksander Morgado\n"
              "License GPLv2+: GNU GPL version 2 or later <http://gnu.org/licenses/gpl-2.0.html>\n"
              "This is free software: you are free to change and redistribute it.\n"
              "There is NO WARRANTY, to the extent permitted by law.\n"
              "\n");
+    exit (EXIT_SUCCESS);
+}
+
+/*****************************************************************************/
+
+G_GNUC_NORETURN
+static void
+print_printable_str_and_exit (const gchar *hex)
+{
+    g_autofree gchar       *printable = NULL;
+    g_autoptr(MbimMessage)  message = NULL;
+    g_autoptr(GError)       error = NULL;
+    gsize                   data_size = 0;
+    g_autofree guint8      *data      = NULL;
+
+    data = mbimcli_read_buffer_from_string (hex, -1, &data_size, &error);
+    if (!data) {
+        g_printerr ("Failed to read data: %s\n", error->message);
+        exit (EXIT_FAILURE);
+    }
+
+    message = mbim_message_new (data, data_size);
+    if (!mbim_message_validate (message, &error)) {
+        g_printerr ("error: message validation failed: %s\n", error->message);
+        exit (EXIT_FAILURE);
+    }
+
+    printable = mbim_message_get_printable_full (message, 1, 0, "---- ", FALSE, &error);
+    if (!printable) {
+        g_printerr ("error: printable info retrieval failed: %s\n", error->message);
+        exit (EXIT_FAILURE);
+    }
+
+    g_print ("%s\n", printable);
     exit (EXIT_SUCCESS);
 }
 
@@ -261,6 +304,12 @@ device_open_ready (MbimDevice   *dev,
         return;
     }
 
+    /* Link management action? */
+    if (mbimcli_link_management_options_enabled ()) {
+        mbimcli_link_management_run (dev, cancellable);
+        return;
+    }
+
     /* Run the service-specific action */
     switch (service) {
     case MBIM_SERVICE_BASIC_CONNECT:
@@ -278,6 +327,9 @@ device_open_ready (MbimDevice   *dev,
     case MBIM_SERVICE_MS_HOST_SHUTDOWN:
         mbimcli_ms_host_shutdown_run (dev, cancellable);
         return;
+    case MBIM_SERVICE_MS_SAR:
+        mbimcli_ms_sar_run (dev, cancellable);
+        return;
     case MBIM_SERVICE_ATDS:
         mbimcli_atds_run (dev, cancellable);
         return;
@@ -287,12 +339,34 @@ device_open_ready (MbimDevice   *dev,
     case MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS:
         mbimcli_ms_basic_connect_extensions_run (dev, cancellable);
         return;
+    case MBIM_SERVICE_QUECTEL:
+        mbimcli_quectel_run (dev, cancellable);
+        return;
+    case MBIM_SERVICE_INTEL_THERMAL_RF:
+        mbimcli_intel_thermal_rf_run (dev, cancellable);
+        return;
+    case MBIM_SERVICE_MS_VOICE_EXTENSIONS:
+        mbimcli_ms_voice_extensions_run (dev, cancellable);
+        return;
+    case MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS:
+        mbimcli_ms_uicc_low_level_access_run (dev, cancellable);
+        return;
+    case MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION:
+        mbimcli_intel_mutual_authentication_run (dev, cancellable);
+        return;
+    case MBIM_SERVICE_GOOGLE:
+        mbimcli_google_run (dev, cancellable);
+        return;
     case MBIM_SERVICE_SMS:
     case MBIM_SERVICE_USSD:
     case MBIM_SERVICE_STK:
     case MBIM_SERVICE_AUTH:
     case MBIM_SERVICE_PROXY_CONTROL:
     case MBIM_SERVICE_QMI:
+    case MBIM_SERVICE_QDU:
+    case MBIM_SERVICE_INTEL_TOOLS:
+        mbimcli_intel_tools_run (dev, cancellable);
+        return;
         /* unsupported actions in the CLI */
     case MBIM_SERVICE_INVALID:
     default:
@@ -333,6 +407,10 @@ device_new_ready (GObject      *unused,
     /* Setup device open flags */
     if (device_open_proxy_flag)
         open_flags |= MBIM_DEVICE_OPEN_FLAGS_PROXY;
+    if (device_open_ms_mbimex_v2_flag)
+        open_flags |= MBIM_DEVICE_OPEN_FLAGS_MS_MBIMEX_V2;
+    if (device_open_ms_mbimex_v3_flag)
+        open_flags |= MBIM_DEVICE_OPEN_FLAGS_MS_MBIMEX_V3;
 
     /* Open the device */
     mbim_device_open_full (device,
@@ -350,30 +428,86 @@ parse_actions (void)
 {
     guint actions_enabled = 0;
 
-    /* Basic Connect options? */
+    if (mbimcli_link_management_options_enabled ())
+        actions_enabled++;
+
     if (mbimcli_basic_connect_options_enabled ()) {
         service = MBIM_SERVICE_BASIC_CONNECT;
         actions_enabled++;
-    } else if (mbimcli_phonebook_options_enabled ()) {
+    }
+
+    if (mbimcli_phonebook_options_enabled ()) {
         service = MBIM_SERVICE_PHONEBOOK;
         actions_enabled++;
-    } else if (mbimcli_dss_options_enabled ()) {
+    }
+
+    if (mbimcli_dss_options_enabled ()) {
         service = MBIM_SERVICE_DSS;
         actions_enabled++;
-    } else if (mbimcli_ms_firmware_id_options_enabled ()) {
+    }
+
+    if (mbimcli_ms_firmware_id_options_enabled ()) {
         service = MBIM_SERVICE_MS_FIRMWARE_ID;
         actions_enabled++;
-    } else if (mbimcli_ms_host_shutdown_options_enabled ()) {
+    }
+
+    if (mbimcli_ms_host_shutdown_options_enabled ()) {
         service = MBIM_SERVICE_MS_HOST_SHUTDOWN;
         actions_enabled++;
-    } else if (mbimcli_atds_options_enabled ()) {
+    }
+
+    if (mbimcli_ms_sar_options_enabled ()) {
+        service = MBIM_SERVICE_MS_SAR;
+        actions_enabled++;
+    }
+
+    if (mbimcli_atds_options_enabled ()) {
         service = MBIM_SERVICE_ATDS;
         actions_enabled++;
-    } else if (mbimcli_intel_firmware_update_options_enabled ()) {
+    }
+
+    if (mbimcli_intel_firmware_update_options_enabled ()) {
         service = MBIM_SERVICE_INTEL_FIRMWARE_UPDATE;
         actions_enabled++;
-    } else if (mbimcli_ms_basic_connect_extensions_options_enabled ()) {
+    }
+
+    if (mbimcli_ms_basic_connect_extensions_options_enabled ()) {
         service = MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS;
+        actions_enabled++;
+    }
+
+    if (mbimcli_quectel_options_enabled ()) {
+        service = MBIM_SERVICE_QUECTEL;
+        actions_enabled++;
+    }
+
+    if (mbimcli_intel_thermal_rf_options_enabled ()) {
+        service = MBIM_SERVICE_INTEL_THERMAL_RF;
+        actions_enabled++;
+    }
+
+    if (mbimcli_ms_voice_extensions_options_enabled ()) {
+        service = MBIM_SERVICE_MS_VOICE_EXTENSIONS;
+        actions_enabled++;
+    }
+
+    if (mbimcli_ms_uicc_low_level_access_options_enabled ()) {
+        service = MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS;
+        actions_enabled++;
+    }
+
+    if (mbimcli_intel_mutual_authentication_options_enabled ()) {
+        service = MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION;
+        actions_enabled++;
+    }
+
+    if (mbimcli_intel_tools_options_enabled ()) {
+        service = MBIM_SERVICE_INTEL_TOOLS;
+        actions_enabled++;
+    }
+
+    if (mbimcli_google_options_enabled ()) {
+        service = MBIM_SERVICE_GOOGLE;
         actions_enabled++;
     }
 
@@ -393,6 +527,11 @@ parse_actions (void)
         exit (EXIT_FAILURE);
     }
 
+    if (device_open_ms_mbimex_v2_flag && device_open_ms_mbimex_v3_flag) {
+        g_printerr ("error: cannot request both MBIMEx v2.0 and 3.0 at the same time\n");
+        exit (EXIT_FAILURE);
+    }
+
     /* Go on! */
 }
 
@@ -406,22 +545,23 @@ int main (int argc, char **argv)
 
     /* Setup option context, process it and destroy it */
     context = g_option_context_new ("- Control MBIM devices");
-    g_option_context_add_group (context,
-                                mbimcli_basic_connect_get_option_group ());
-    g_option_context_add_group (context,
-                                mbimcli_phonebook_get_option_group ());
-    g_option_context_add_group (context,
-                                mbimcli_dss_get_option_group ());
-    g_option_context_add_group (context,
-                                mbimcli_ms_firmware_id_get_option_group ());
-    g_option_context_add_group (context,
-                                mbimcli_ms_host_shutdown_get_option_group ());
-    g_option_context_add_group (context,
-                                mbimcli_atds_get_option_group ());
-    g_option_context_add_group (context,
-                                mbimcli_intel_firmware_update_get_option_group ());
-    g_option_context_add_group (context,
-                                mbimcli_ms_basic_connect_extensions_get_option_group ());
+    g_option_context_add_group (context, mbimcli_basic_connect_get_option_group ());
+    g_option_context_add_group (context, mbimcli_phonebook_get_option_group ());
+    g_option_context_add_group (context, mbimcli_dss_get_option_group ());
+    g_option_context_add_group (context, mbimcli_ms_firmware_id_get_option_group ());
+    g_option_context_add_group (context, mbimcli_ms_host_shutdown_get_option_group ());
+    g_option_context_add_group (context, mbimcli_ms_sar_get_option_group ());
+    g_option_context_add_group (context, mbimcli_atds_get_option_group ());
+    g_option_context_add_group (context, mbimcli_intel_firmware_update_get_option_group ());
+    g_option_context_add_group (context, mbimcli_ms_basic_connect_extensions_get_option_group ());
+    g_option_context_add_group (context, mbimcli_quectel_get_option_group ());
+    g_option_context_add_group (context, mbimcli_link_management_get_option_group ());
+    g_option_context_add_group (context, mbimcli_intel_thermal_rf_get_option_group ());
+    g_option_context_add_group (context, mbimcli_ms_voice_extensions_get_option_group ());
+    g_option_context_add_group (context, mbimcli_ms_uicc_low_level_access_get_option_group ());
+    g_option_context_add_group (context, mbimcli_intel_mutual_authentication_get_option_group ());
+    g_option_context_add_group (context, mbimcli_intel_tools_get_option_group ());
+    g_option_context_add_group (context, mbimcli_google_get_option_group());
     g_option_context_add_main_entries (context, main_entries, NULL);
     if (!g_option_context_parse (context, &argc, &argv, &error)) {
         g_printerr ("error: %s\n", error->message);
@@ -433,8 +573,20 @@ int main (int argc, char **argv)
 
     g_log_set_handler (NULL, G_LOG_LEVEL_MASK, log_handler, NULL);
     g_log_set_handler ("Mbim", G_LOG_LEVEL_MASK, log_handler, NULL);
-    if (verbose_flag)
+
+    if (verbose_flag && verbose_full_flag) {
+        g_printerr ("error: cannot specify --verbose and --verbose-full at the same time\n");
+        exit (EXIT_FAILURE);
+    } else if (verbose_flag) {
         mbim_utils_set_traces_enabled (TRUE);
+        mbim_utils_set_show_personal_info (FALSE);
+    } else if (verbose_full_flag) {
+        mbim_utils_set_traces_enabled (TRUE);
+        mbim_utils_set_show_personal_info (TRUE);
+    }
+
+    if (printable_str)
+        print_printable_str_and_exit (printable_str);
 
     /* No device path given? */
     if (!device_str) {

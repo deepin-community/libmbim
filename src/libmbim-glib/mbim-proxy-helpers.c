@@ -1,22 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
  *
  * Copyright (C) 2014 Aleksander Morgado <aleksander@aleksander.es>
  * Copyright (C) 2014 Smith Micro Software, Inc.
@@ -169,15 +154,15 @@ _mbim_proxy_helper_service_subscribe_request_parse (MbimMessage  *message,
 
         offset += 4;
         for (i = 0; i < element_count; i++) {
-            const MbimUuid *uuid;
+            MbimUuid uuid;
 
             if (!_mbim_message_read_guint32 (message, offset, &array_offset, &inner_error))
                 break;
-            if (!_mbim_message_read_uuid (message, array_offset, &uuid, &inner_error))
+            if (!_mbim_message_read_uuid (message, array_offset, NULL, &uuid, &inner_error))
                 break;
 
             array[i] = g_new0 (MbimEventEntry, 1);
-            memcpy (&(array[i]->device_service_id), uuid, 16);
+            memcpy (&(array[i]->device_service_id), &uuid, 16);
             array_offset += 16;
 
             if (!_mbim_message_read_guint32 (message, array_offset, &(array[i])->cids_count, &inner_error))

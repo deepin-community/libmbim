@@ -1,19 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- Mode: python; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
 #
-# This program is free software; you can redistribute it and/or modify it under
-# the terms of the GNU Lesser General Public License as published by the Free
-# Software Foundation; either version 2 of the License, or (at your option) any
-# later version.
-#
-# This program is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-# FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more
-# details.
-#
-# You should have received a copy of the GNU Lesser General Public License along
-# with this program; if not, write to the Free Software Foundation, Inc., 51
-# Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # Copyright (C) 2013-2018 Aleksander Morgado <aleksander@gnu.org>
 #
@@ -29,13 +17,11 @@ import utils
 def codegen_main():
     # Input arguments
     arg_parser = optparse.OptionParser('%prog [options]')
-    arg_parser.add_option('', '--input', metavar='JSONFILE',
-                          help='Input JSON-formatted database')
     arg_parser.add_option('', '--output', metavar='OUTFILES',
                           help='Generate C code in OUTFILES.[ch]')
     (opts, args) = arg_parser.parse_args();
 
-    if opts.input == None:
+    if args == None:
         raise RuntimeError('Input JSON file is mandatory')
     if opts.output == None:
         raise RuntimeError('Output file pattern is mandatory')
@@ -45,11 +31,11 @@ def codegen_main():
     output_file_h = open(opts.output + ".h", 'w')
     output_file_sections = open(opts.output + ".sections", 'w')
 
-    # Load database file contents
-    database_file_contents = utils.read_json_file(opts.input)
-
-    # Build message list
-    object_list_json = json.loads(database_file_contents)
+    # Build message list from all input files
+    object_list_json = []
+    for input_file in args:
+        database_file_contents = utils.read_json_file(input_file)
+        object_list_json += json.loads(database_file_contents)
     object_list = ObjectList(object_list_json)
 
     # Add common stuff to the output files
@@ -57,6 +43,8 @@ def codegen_main():
     utils.add_copyright(output_file_h);
     utils.add_header_start(output_file_h, os.path.basename(opts.output))
     utils.add_source_start(output_file_c, os.path.basename(opts.output))
+    for input_file in args:
+        utils.add_header_sections(output_file_h, os.path.splitext(os.path.basename(input_file))[0])
 
     # Emit the message creation/parsing code
     object_list.emit(output_file_h, output_file_c)

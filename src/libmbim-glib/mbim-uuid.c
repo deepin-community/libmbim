@@ -1,26 +1,12 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
  *
  * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
  * Copyright (C) 2014 NVDIA Corporation
  * Copyright (C) 2014 Smith Micro Software, Inc.
+ * Copyright (C) 2022 Intel Corporation
  */
 
 #include <config.h>
@@ -182,6 +168,14 @@ static const MbimUuid uuid_ms_host_shutdown = {
     .e = { 0x27, 0xd7, 0xfb, 0x80, 0x95, 0x9c }
 };
 
+static const MbimUuid uuid_ms_sar = {
+    .a = { 0x68, 0x22, 0x3d, 0x04 },
+    .b = { 0x9f, 0x6c },
+    .c = { 0x4e, 0x0f },
+    .d = { 0x82, 0x2d },
+    .e = { 0x28, 0x44, 0x1f, 0xb7, 0x23, 0x40 }
+};
+
 static const MbimUuid uuid_proxy_control = {
     .a = { 0x83, 0x8c, 0xf7, 0xfb },
     .b = { 0x8d, 0x0d },
@@ -215,12 +209,76 @@ static const MbimUuid uuid_intel_firmware_update = {
     .e = { 0x3b, 0x3f, 0xd7, 0x6f, 0x56, 0x41 }
 };
 
+static const MbimUuid uuid_qdu = {
+    .a = { 0x64, 0x27, 0x01, 0x5f },
+    .b = { 0x57, 0x9d },
+    .c = { 0x48, 0xf5 },
+    .d = { 0x8c, 0x54 },
+    .e = { 0xf4, 0x3e, 0xd1, 0xe7, 0x6f, 0x83 }
+};
+
 static const MbimUuid uuid_ms_basic_connect_extensions = {
     .a = { 0x3d, 0x01, 0xdc, 0xc5 },
     .b = { 0xfe, 0xf5 },
     .c = { 0x4d, 0x05 },
     .d = { 0x0d, 0x3a },
     .e = { 0xbe, 0xf7, 0x05, 0x8e, 0x9a, 0xaf }
+};
+
+static const MbimUuid uuid_ms_uicc_low_level_access = {
+    .a = { 0xc2, 0xf6, 0x58, 0x8e },
+    .b = { 0xf0, 0x37 },
+    .c = { 0x4b, 0xc9 },
+    .d = { 0x86, 0x65 },
+    .e = { 0xf4, 0xd4, 0x4b, 0xd0, 0x93, 0x67 }
+};
+
+static const MbimUuid uuid_quectel = {
+    .a = { 0x11, 0x22, 0x33, 0x44 },
+    .b = { 0x55, 0x66 },
+    .c = { 0x77, 0x88 },
+    .d = { 0x99, 0xaa },
+    .e = { 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x11 }
+};
+
+static const MbimUuid uuid_intel_thermal_rf = {
+    .a = { 0xfd, 0xc2, 0x2a, 0xf2 },
+    .b = { 0xf4, 0x41 },
+    .c = { 0x4d, 0x46 },
+    .d = { 0xaf, 0x8d },
+    .e = { 0x25, 0x9f, 0xcd, 0xde, 0x46, 0x35 }
+};
+
+static const MbimUuid uuid_ms_voice_extensions = {
+    .a = { 0x8d, 0x8b, 0x9e, 0xba },
+    .b = { 0x37, 0xbe },
+    .c = { 0x44, 0x9b },
+    .d = { 0x8f, 0x1e },
+    .e = { 0x61, 0xcb, 0x03, 0x4a, 0x70, 0x2e }
+};
+
+static const MbimUuid uuid_intel_mutual_authentication = {
+    .a = { 0xf8, 0x5d, 0x46, 0xef },
+    .b = { 0xab, 0x26 },
+    .c = { 0x40, 0x81 },
+    .d = { 0x98, 0x68 },
+    .e = { 0x4d, 0x18, 0x3c, 0x0a, 0x3a, 0xec }
+};
+
+static const MbimUuid uuid_intel_tools = {
+    .a = { 0x4a, 0xda, 0x49, 0x62 },
+    .b = { 0xb9, 0x88 },
+    .c = { 0x46, 0xc3 },
+    .d = { 0x87, 0xa7 },
+    .e = { 0x97, 0xf2, 0x0f, 0x99, 0x4a, 0xbb }
+};
+
+static const MbimUuid uuid_google = {
+    .a = { 0x3e, 0x1e, 0x92, 0xcf },
+    .b = { 0xc5, 0x3d },
+    .c = { 0x4f, 0x14 },
+    .d = { 0x85, 0xd0 },
+    .e = { 0xa8, 0x6a, 0xd9, 0xe1, 0x22, 0x45 }
 };
 
 static GList *mbim_custom_service_list = NULL;
@@ -336,16 +394,34 @@ mbim_uuid_from_service (MbimService service)
         return &uuid_ms_firmware_id;
     case MBIM_SERVICE_MS_HOST_SHUTDOWN:
         return &uuid_ms_host_shutdown;
+    case MBIM_SERVICE_MS_SAR:
+        return &uuid_ms_sar;
     case MBIM_SERVICE_PROXY_CONTROL:
         return &uuid_proxy_control;
     case MBIM_SERVICE_QMI:
         return &uuid_qmi;
     case MBIM_SERVICE_ATDS:
         return &uuid_atds;
+    case MBIM_SERVICE_QDU:
+        return &uuid_qdu;
     case MBIM_SERVICE_INTEL_FIRMWARE_UPDATE:
         return &uuid_intel_firmware_update;
     case MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS:
         return &uuid_ms_basic_connect_extensions;
+    case MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS:
+        return &uuid_ms_uicc_low_level_access;
+    case MBIM_SERVICE_QUECTEL:
+        return &uuid_quectel;
+    case MBIM_SERVICE_INTEL_THERMAL_RF:
+        return &uuid_intel_thermal_rf;
+    case MBIM_SERVICE_MS_VOICE_EXTENSIONS:
+        return &uuid_ms_voice_extensions;
+    case MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION:
+        return &uuid_intel_mutual_authentication;
+    case MBIM_SERVICE_INTEL_TOOLS:
+        return &uuid_intel_tools;
+    case MBIM_SERVICE_GOOGLE:
+        return &uuid_google;
     case MBIM_SERVICE_LAST:
         g_assert_not_reached ();
     default:
@@ -389,6 +465,9 @@ mbim_uuid_to_service (const MbimUuid *uuid)
     if (mbim_uuid_cmp (uuid, &uuid_ms_host_shutdown))
         return MBIM_SERVICE_MS_HOST_SHUTDOWN;
 
+    if (mbim_uuid_cmp (uuid, &uuid_ms_sar))
+        return MBIM_SERVICE_MS_SAR;
+
     if (mbim_uuid_cmp (uuid, &uuid_proxy_control))
         return MBIM_SERVICE_PROXY_CONTROL;
 
@@ -401,8 +480,32 @@ mbim_uuid_to_service (const MbimUuid *uuid)
     if (mbim_uuid_cmp (uuid, &uuid_intel_firmware_update))
         return MBIM_SERVICE_INTEL_FIRMWARE_UPDATE;
 
+    if (mbim_uuid_cmp (uuid, &uuid_qdu))
+        return MBIM_SERVICE_QDU;
+
     if (mbim_uuid_cmp (uuid, &uuid_ms_basic_connect_extensions))
         return MBIM_SERVICE_MS_BASIC_CONNECT_EXTENSIONS;
+
+    if (mbim_uuid_cmp (uuid, &uuid_ms_uicc_low_level_access))
+        return MBIM_SERVICE_MS_UICC_LOW_LEVEL_ACCESS;
+
+    if (mbim_uuid_cmp (uuid, &uuid_quectel))
+        return MBIM_SERVICE_QUECTEL;
+
+    if (mbim_uuid_cmp (uuid, &uuid_intel_thermal_rf))
+        return MBIM_SERVICE_INTEL_THERMAL_RF;
+
+    if (mbim_uuid_cmp (uuid, &uuid_ms_voice_extensions))
+        return MBIM_SERVICE_MS_VOICE_EXTENSIONS;
+
+    if (mbim_uuid_cmp (uuid, &uuid_intel_mutual_authentication))
+        return MBIM_SERVICE_INTEL_MUTUAL_AUTHENTICATION;
+
+    if (mbim_uuid_cmp (uuid, &uuid_intel_tools))
+        return MBIM_SERVICE_INTEL_TOOLS;
+
+    if (mbim_uuid_cmp (uuid, &uuid_google))
+        return MBIM_SERVICE_GOOGLE;
 
     for (l = mbim_custom_service_list; l != NULL; l = l->next) {
         if (mbim_uuid_cmp (&((MbimCustomService *)l->data)->uuid, uuid))
@@ -486,10 +589,50 @@ static const MbimUuid uuid_context_type_local = {
     .e = { 0x03, 0x3C, 0x39, 0xF6, 0x0D, 0xB9 }
 };
 
+static const MbimUuid uuid_context_type_admin = {
+    .a = { 0x5F, 0x7E, 0x4C, 0x2E },
+    .b = { 0xE8, 0x0B },
+    .c = { 0x40, 0xA9 },
+    .d = { 0xA2, 0x39 },
+    .e = { 0xF0, 0xAB, 0xCF, 0xD1, 0x1F, 0x4B }
+};
+
+static const MbimUuid uuid_context_type_app = {
+    .a = { 0x74, 0xD8, 0x8A, 0x3D },
+    .b = { 0xDF, 0xBD },
+    .c = { 0x47, 0x99 },
+    .d = { 0x9A, 0x8C },
+    .e = { 0x73, 0x10, 0xA3, 0x7B, 0xB2, 0xEE }
+};
+
+static const MbimUuid uuid_context_type_xcap = {
+    .a = { 0x50, 0xD3, 0x78, 0xA7 },
+    .b = { 0xBA, 0xA5 },
+    .c = { 0x4A, 0x50 },
+    .d = { 0xB8, 0x72 },
+    .e = { 0x3F, 0xE5, 0xBB, 0x46, 0x34, 0x11 }
+};
+
+static const MbimUuid uuid_context_type_tethering = {
+    .a = { 0x5E, 0x4E, 0x06, 0x01 },
+    .b = { 0x48, 0xDC },
+    .c = { 0x4E, 0x2B },
+    .d = { 0xAC, 0xB8 },
+    .e = { 0x08, 0xB4, 0x01, 0x6B, 0xBA, 0xAC }
+};
+
+static const MbimUuid uuid_context_type_emergency_calling = {
+    .a = { 0x5F, 0x41, 0xAD, 0xB8 },
+    .b = { 0x20, 0x4E },
+    .c = { 0x4D, 0x31 },
+    .d = { 0x9D, 0xA8 },
+    .e = { 0xB3, 0xC9, 0x70, 0xE3, 0x60, 0xF2 }
+};
+
 const MbimUuid *
 mbim_uuid_from_context_type (MbimContextType context_type)
 {
-    g_return_val_if_fail (context_type <= MBIM_CONTEXT_TYPE_LOCAL, &uuid_invalid);
+    g_return_val_if_fail (context_type <= MBIM_CONTEXT_TYPE_EMERGENCY_CALLING, &uuid_invalid);
 
     switch (context_type) {
     case MBIM_CONTEXT_TYPE_INVALID:
@@ -512,6 +655,16 @@ mbim_uuid_from_context_type (MbimContextType context_type)
         return &uuid_context_type_mms;
     case MBIM_CONTEXT_TYPE_LOCAL:
         return &uuid_context_type_local;
+    case MBIM_CONTEXT_TYPE_ADMIN:
+        return &uuid_context_type_admin;
+    case MBIM_CONTEXT_TYPE_APP:
+        return &uuid_context_type_app;
+    case MBIM_CONTEXT_TYPE_XCAP:
+        return &uuid_context_type_xcap;
+    case MBIM_CONTEXT_TYPE_TETHERING:
+        return &uuid_context_type_tethering;
+    case MBIM_CONTEXT_TYPE_EMERGENCY_CALLING:
+        return &uuid_context_type_emergency_calling;
     default:
         g_assert_not_reached ();
     }
@@ -546,6 +699,21 @@ mbim_uuid_to_context_type (const MbimUuid *uuid)
 
     if (mbim_uuid_cmp (uuid, &uuid_context_type_local))
         return MBIM_CONTEXT_TYPE_LOCAL;
+
+    if (mbim_uuid_cmp (uuid, &uuid_context_type_admin))
+        return MBIM_CONTEXT_TYPE_ADMIN;
+
+    if (mbim_uuid_cmp (uuid, &uuid_context_type_app))
+        return MBIM_CONTEXT_TYPE_APP;
+
+    if (mbim_uuid_cmp (uuid, &uuid_context_type_xcap))
+        return MBIM_CONTEXT_TYPE_XCAP;
+
+    if (mbim_uuid_cmp (uuid, &uuid_context_type_tethering))
+        return MBIM_CONTEXT_TYPE_TETHERING;
+
+    if (mbim_uuid_cmp (uuid, &uuid_context_type_emergency_calling))
+        return MBIM_CONTEXT_TYPE_EMERGENCY_CALLING;
 
     return MBIM_CONTEXT_TYPE_INVALID;
 }

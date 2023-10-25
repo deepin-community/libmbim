@@ -1,15 +1,6 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details:
- *
  * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
  */
 
@@ -22,12 +13,15 @@
 #include "mbim-auth.h"
 #include "mbim-stk.h"
 #include "mbim-ms-firmware-id.h"
+#include "mbim-ms-basic-connect-extensions.h"
+#include "mbim-ms-uicc-low-level-access.h"
+#include "mbim-google.h"
 #include "mbim-message.h"
+#include "mbim-tlv.h"
 #include "mbim-cid.h"
 #include "mbim-common.h"
 #include "mbim-error-types.h"
 
-#if defined ENABLE_TEST_MESSAGE_TRACES
 static void
 test_message_trace (const guint8 *computed,
                     guint32       computed_size,
@@ -60,12 +54,28 @@ test_message_trace (const guint8 *computed,
         }
     }
 }
-#else
-#define test_message_trace(...)
-#endif
 
 static void
-test_message_parser_basic_connect_visible_providers (void)
+test_message_printable (MbimMessage *message,
+                        guint8       mbimex_version_major,
+                        guint8       mbimex_version_minor)
+{
+    g_autofree gchar *printable = NULL;
+
+    printable = mbim_message_get_printable_full (message,
+                                                 mbimex_version_major,
+                                                 mbimex_version_minor,
+                                                 "---- ",
+                                                 FALSE,
+                                                 NULL);
+    g_print ("\n"
+             "Message printable:\n"
+             "%s\n",
+             printable);
+}
+
+static void
+test_basic_connect_visible_providers (void)
 {
     guint32 n_providers;
     g_autoptr(GError) error = NULL;
@@ -126,6 +136,10 @@ test_message_parser_basic_connect_visible_providers (void)
         0x67, 0x00, 0x65, 0x00 };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_visible_providers_response_parse (
                   response,
@@ -171,7 +185,7 @@ test_message_parser_basic_connect_visible_providers (void)
 }
 
 static void
-test_message_parser_basic_connect_subscriber_ready_status (void)
+test_basic_connect_subscriber_ready_status (void)
 {
     MbimSubscriberReadyState ready_state;
     MbimReadyInfoFlag ready_info;
@@ -243,6 +257,10 @@ test_message_parser_basic_connect_subscriber_ready_status (void)
         0x31, 0x00, 0x32, 0x00 };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_subscriber_ready_status_response_parse (
                   response,
@@ -267,7 +285,7 @@ test_message_parser_basic_connect_subscriber_ready_status (void)
 }
 
 static void
-test_message_parser_basic_connect_device_caps (void)
+test_basic_connect_device_caps (void)
 {
     MbimDeviceType device_type;
     MbimCellularClass cellular_class;
@@ -338,6 +356,10 @@ test_message_parser_basic_connect_device_caps (void)
                                 0x4D, 0x00, 0x00, 0x00 };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_device_caps_response_parse (
                   response,
@@ -376,7 +398,7 @@ test_message_parser_basic_connect_device_caps (void)
 }
 
 static void
-test_message_parser_basic_connect_ip_configuration (void)
+test_basic_connect_ip_configuration (void)
 {
     guint32 session_id;
     MbimIPConfigurationAvailableFlag ipv4configurationavailable;
@@ -437,6 +459,10 @@ test_message_parser_basic_connect_ip_configuration (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_ip_configuration_response_parse (
                   response,
@@ -507,8 +533,191 @@ test_message_parser_basic_connect_ip_configuration (void)
     g_assert (ipv6dnsserver == NULL);
 }
 
+
 static void
-test_message_parser_basic_connect_service_activation (void)
+test_basic_connect_ip_configuration_2 (void)
+{
+    guint32 session_id;
+    MbimIPConfigurationAvailableFlag ipv4configurationavailable;
+    MbimIPConfigurationAvailableFlag ipv6configurationavailable;
+    guint32 ipv4addresscount;
+    guint32 ipv6addresscount;
+    const MbimIPv4 *ipv4gateway;
+    const MbimIPv6 *ipv6gateway;
+    guint32 ipv4dnsservercount;
+    guint32 ipv6dnsservercount;
+    guint32 ipv4mtu;
+    guint32 ipv6mtu;
+    g_autofree MbimIPv4 *ipv4dnsserver = NULL;
+    g_autofree MbimIPv6 *ipv6dnsserver = NULL;
+    g_autoptr(MbimIPv4ElementArray) ipv4address = NULL;
+    g_autoptr(MbimIPv6ElementArray) ipv6address = NULL;
+    g_autoptr(GError) error = NULL;
+    g_autoptr(MbimMessage) response = NULL;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0xC4, 0x00, 0x00, 0x00, /* length */
+        0x24, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0xA2, 0x89, 0xCC, 0x33, /* service id */
+        0xBC, 0xBB, 0x8B, 0x4F,
+        0xB6, 0xB0, 0x13, 0x3E,
+        0xC2, 0xAA, 0xE6, 0xDF,
+        0x0F, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x94, 0x00, 0x00, 0x00, /* buffer length */
+        /* information buffer */
+        0x00, 0x00, 0x00, 0x00, /* session id */
+        0x0F, 0x00, 0x00, 0x00, /* IPv4ConfigurationAvailable */
+        0x0F, 0x00, 0x00, 0x00, /* IPv6ConfigurationAvailable */
+        0x01, 0x00, 0x00, 0x00, /* IPv4 element count */
+        0x3C, 0x00, 0x00, 0x00, /* IPv4 element offset */
+        0x01, 0x00, 0x00, 0x00, /* IPv6 element count */
+        0x50, 0x00, 0x00, 0x00, /* IPv6 element offset */
+        0x44, 0x00, 0x00, 0x00, /* IPv4 gateway offset */
+        0x64, 0x00, 0x00, 0x00, /* IPv6 gateway offset */
+        0x02, 0x00, 0x00, 0x00, /* IPv4 DNS count */
+        0x48, 0x00, 0x00, 0x00, /* IPv4 DNS offset */
+        0x02, 0x00, 0x00, 0x00, /* IPv6 DNS count */
+        0x74, 0x00, 0x00, 0x00, /* IPv6 DNS offset */
+        0xDC, 0x05, 0x00, 0x00, /* IPv4 MTU */
+        0xDC, 0x05, 0x00, 0x00, /* IPv6 MTU */
+        /* data buffer */
+        0x1D, 0x00, 0x00, 0x00, /* IPv4 element (netmask) */
+        0x1C, 0xF6, 0xC9, 0xDB, /* IPv4 element (address) */
+        0x1C, 0xF6, 0xC9, 0xDC, /* IPv4 gateway */
+        0x0A, 0xB1, 0x00, 0x22, /* IPv4 DNS1 */
+        0x0A, 0xB1, 0x00, 0xD2, /* IPv4 DNS2 */
+        0x40, 0x00, 0x00, 0x00, /* IPv6 element (netmask) */
+        0x26, 0x07, 0xFB, 0x90, /* IPv6 element (address) */
+        0x64, 0x3B, 0x28, 0x1F,
+        0x1D, 0xFF, 0xBF, 0x3D,
+        0xC5, 0xC8, 0x48, 0xAD,
+        0x26, 0x07, 0xFB, 0x90, /* IPv6 gateway */
+        0x64, 0x3B, 0x28, 0x1F,
+        0xFD, 0xF7, 0x80, 0xF4,
+        0xE3, 0x99, 0x98, 0x4A,
+        0xFD, 0x00, 0x97, 0x6A, /* IPv6 DNS1 */
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x09,
+        0xFD, 0x00, 0x97, 0x6A, /* IPv6 DNS2 */
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x10
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
+
+    g_assert (mbim_message_ip_configuration_response_parse (
+                  response,
+                  &session_id,
+                  &ipv4configurationavailable,
+                  &ipv6configurationavailable,
+                  &ipv4addresscount,
+                  &ipv4address,
+                  &ipv6addresscount,
+                  &ipv6address,
+                  &ipv4gateway,
+                  &ipv6gateway,
+                  &ipv4dnsservercount,
+                  &ipv4dnsserver,
+                  &ipv6dnsservercount,
+                  &ipv6dnsserver,
+                  &ipv4mtu,
+                  &ipv6mtu,
+                  &error));
+
+    /*
+     *   IPv4 configuration available: 'address, gateway, dns, mtu'
+     *     IP addresses (1)
+     *       IP [0]: '28.246.201.219/29'
+     *     gateway: '28.246.201.220'
+     *     DNS addresses (2)
+     *       DNS [0]: '10.177.0.34'
+     *       DNS [1]: '10.177.0.210'
+     *     MTU: '1500'
+     *   IPv6 configuration available: 'address, gateway, dns, mtu'
+     *     IP addresses (1)
+     *       IP [0]: '2607:fb90:643b:281f:1dff:bf3d:c5c8:48ad/64'
+     *     gateway: '2607:fb90:643b:281f:fdf7:80f4:e399:984a'
+     *     DNS addresses (2)
+     *       DNS [0]: 'fd00:976a::9'
+     */
+
+    g_assert_cmpuint (session_id, ==, 0);
+    g_assert_cmpuint (ipv4configurationavailable, ==, (MBIM_IP_CONFIGURATION_AVAILABLE_FLAG_ADDRESS |
+                                                       MBIM_IP_CONFIGURATION_AVAILABLE_FLAG_GATEWAY |
+                                                       MBIM_IP_CONFIGURATION_AVAILABLE_FLAG_DNS |
+                                                       MBIM_IP_CONFIGURATION_AVAILABLE_FLAG_MTU));
+    g_assert_cmpuint (ipv6configurationavailable, ==, MBIM_IP_CONFIGURATION_AVAILABLE_FLAG_ADDRESS |
+                                                       MBIM_IP_CONFIGURATION_AVAILABLE_FLAG_GATEWAY |
+                                                       MBIM_IP_CONFIGURATION_AVAILABLE_FLAG_DNS |
+                                                       MBIM_IP_CONFIGURATION_AVAILABLE_FLAG_MTU);
+
+    {
+        MbimIPv4 addr = { .addr = { 0x1C, 0xF6, 0xC9, 0xDB } };
+
+        g_assert_cmpuint (ipv4addresscount, ==, 1);
+        g_assert_cmpuint (ipv4address[0]->on_link_prefix_length, ==, 29);
+        g_assert (memcmp (&addr, &(ipv4address[0]->ipv4_address), 4) == 0);
+    }
+
+    {
+        MbimIPv4 gateway_addr = { .addr = { 0x1C, 0xF6, 0xC9, 0xDC } };
+
+        g_assert (memcmp (&gateway_addr, ipv4gateway, 4) == 0);
+    }
+
+    {
+        MbimIPv4 dns_addr_1 = { .addr = { 0x0A, 0xB1, 0x00, 0x22 } };
+        MbimIPv4 dns_addr_2 = { .addr = { 0x0A, 0xB1, 0x00, 0xD2 } };
+
+        g_assert_cmpuint (ipv4dnsservercount, ==, 2);
+        g_assert (memcmp (&dns_addr_1, &ipv4dnsserver[0], 4) == 0);
+        g_assert (memcmp (&dns_addr_2, &ipv4dnsserver[1], 4) == 0);
+    }
+
+    g_assert_cmpuint (ipv4mtu, ==, 1500);
+
+    {
+        MbimIPv6 addr = { .addr = { 0x26, 0x07, 0xFB, 0x90,
+                                    0x64, 0x3B, 0x28, 0x1F,
+                                    0x1D, 0xFF, 0xBF, 0x3D,
+                                    0xC5, 0xC8, 0x48, 0xAD } };
+
+        g_assert_cmpuint (ipv6addresscount, ==, 1);
+        g_assert_cmpuint (ipv6address[0]->on_link_prefix_length, ==, 64);
+        g_assert (memcmp (&addr, &(ipv6address[0]->ipv6_address), 16) == 0);
+    }
+
+    {
+        MbimIPv6 dns_addr_1 = { .addr = { 0xFD, 0x00, 0x97, 0x6A,
+                                          0x00, 0x00, 0x00, 0x00,
+                                          0x00, 0x00, 0x00, 0x00,
+                                          0x00, 0x00, 0x00, 0x09 } };
+        MbimIPv6 dns_addr_2 = { .addr = { 0xFD, 0x00, 0x97, 0x6A,
+                                          0x00, 0x00, 0x00, 0x00,
+                                          0x00, 0x00, 0x00, 0x00,
+                                          0x00, 0x00, 0x00, 0x10 } };
+
+        g_assert_cmpuint (ipv6dnsservercount, ==, 2);
+        g_assert (memcmp (&dns_addr_1, &ipv6dnsserver[0], 16) == 0);
+        g_assert (memcmp (&dns_addr_2, &ipv6dnsserver[1], 16) == 0);
+    }
+}
+
+static void
+test_basic_connect_service_activation (void)
 {
     guint32 nw_error;
     const guint8 *databuffer;
@@ -542,6 +751,10 @@ test_message_parser_basic_connect_service_activation (void)
         0x05, 0x06, 0x07, 0x08  };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_service_activation_response_parse (
                   response,
@@ -558,7 +771,7 @@ test_message_parser_basic_connect_service_activation (void)
 }
 
 static void
-test_message_parser_basic_connect_register_state (void)
+test_basic_connect_register_state (void)
 {
     MbimNwError nw_error;
     MbimRegisterState register_state;
@@ -607,6 +820,10 @@ test_message_parser_basic_connect_register_state (void)
         0x36, 0x00, 0x00, 0x00 };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_register_state_response_parse (
                   response,
@@ -623,7 +840,7 @@ test_message_parser_basic_connect_register_state (void)
 
     g_assert_no_error (error);
 
-    g_assert_cmpuint (nw_error, ==, MBIM_NW_ERROR_UNKNOWN);
+    g_assert_cmpuint (nw_error, ==, MBIM_NW_ERROR_NONE);
     g_assert_cmpuint (register_state, ==, MBIM_REGISTER_STATE_HOME);
     g_assert_cmpuint (register_mode, ==, MBIM_REGISTER_MODE_AUTOMATIC);
     g_assert_cmpuint (available_data_classes, ==, (MBIM_DATA_CLASS_UMTS |
@@ -637,7 +854,7 @@ test_message_parser_basic_connect_register_state (void)
 }
 
 static void
-test_message_parser_provisioned_contexts (void)
+test_provisioned_contexts (void)
 {
     guint32 provisioned_contexts_count = 0;
     g_autoptr(MbimProvisionedContextElementArray) provisioned_contexts = NULL;
@@ -663,6 +880,11 @@ test_message_parser_provisioned_contexts (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
+
     g_assert (!mbim_message_provisioned_contexts_response_parse (
                   response,
                   &provisioned_contexts_count,
@@ -673,7 +895,7 @@ test_message_parser_provisioned_contexts (void)
 }
 
 static void
-test_message_parser_sms_read_zero_pdu (void)
+test_sms_read_zero_pdu (void)
 {
     MbimSmsFormat format;
     guint32 messages_count;
@@ -685,7 +907,7 @@ test_message_parser_sms_read_zero_pdu (void)
     const guint8 buffer [] =  {
         /* header */
         0x03, 0x00, 0x00, 0x80, /* type */
-        0xB0, 0x00, 0x00, 0x00, /* length */
+        0x38, 0x00, 0x00, 0x00, /* length */
         0x02, 0x00, 0x00, 0x00, /* transaction id */
         /* fragment header */
         0x01, 0x00, 0x00, 0x00, /* total */
@@ -697,13 +919,17 @@ test_message_parser_sms_read_zero_pdu (void)
         0x23, 0xE5, 0x6C, 0x3F,
         0x02, 0x00, 0x00, 0x00, /* command id */
         0x00, 0x00, 0x00, 0x00, /* status code */
-        0x38, 0x00, 0x00, 0x00, /* buffer length */
+        0x08, 0x00, 0x00, 0x00, /* buffer length */
         /* information buffer */
         0x00, 0x00, 0x00, 0x00, /* 0x00 format */
         0x00, 0x00, 0x00, 0x00, /* 0x04 messages count */
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_sms_read_response_parse (
                   response,
@@ -721,7 +947,7 @@ test_message_parser_sms_read_zero_pdu (void)
 }
 
 static void
-test_message_parser_sms_read_single_pdu (void)
+test_sms_read_single_pdu (void)
 {
     MbimSmsFormat format;
     guint32 messages_count;
@@ -733,7 +959,7 @@ test_message_parser_sms_read_single_pdu (void)
     const guint8 buffer [] =  {
         /* header */
         0x03, 0x00, 0x00, 0x80, /* type */
-        0xB0, 0x00, 0x00, 0x00, /* length */
+        0x60, 0x00, 0x00, 0x00, /* length */
         0x02, 0x00, 0x00, 0x00, /* transaction id */
         /* fragment header */
         0x01, 0x00, 0x00, 0x00, /* total */
@@ -745,7 +971,7 @@ test_message_parser_sms_read_single_pdu (void)
         0x23, 0xE5, 0x6C, 0x3F,
         0x02, 0x00, 0x00, 0x00, /* command id */
         0x00, 0x00, 0x00, 0x00, /* status code */
-        0x60, 0x00, 0x00, 0x00, /* buffer length */
+        0x30, 0x00, 0x00, 0x00, /* buffer length */
         /* information buffer */
         0x00, 0x00, 0x00, 0x00, /* 0x00 format */
         0x01, 0x00, 0x00, 0x00, /* 0x04 messages count */
@@ -771,6 +997,10 @@ test_message_parser_sms_read_single_pdu (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_sms_read_response_parse (
                   response,
@@ -797,7 +1027,7 @@ test_message_parser_sms_read_single_pdu (void)
 }
 
 static void
-test_message_parser_sms_read_multiple_pdu (void)
+test_sms_read_multiple_pdu (void)
 {
     guint32 idx;
     MbimSmsFormat format;
@@ -810,7 +1040,7 @@ test_message_parser_sms_read_multiple_pdu (void)
     const guint8 buffer [] =  {
         /* header */
         0x03, 0x00, 0x00, 0x80, /* type */
-        0xB0, 0x00, 0x00, 0x00, /* length */
+        0x88, 0x00, 0x00, 0x00, /* length */
         0x02, 0x00, 0x00, 0x00, /* transaction id */
         /* fragment header */
         0x01, 0x00, 0x00, 0x00, /* total */
@@ -822,7 +1052,7 @@ test_message_parser_sms_read_multiple_pdu (void)
         0x23, 0xE5, 0x6C, 0x3F,
         0x02, 0x00, 0x00, 0x00, /* command id */
         0x00, 0x00, 0x00, 0x00, /* status code */
-        0x60, 0x00, 0x00, 0x00, /* buffer length */
+        0x58, 0x00, 0x00, 0x00, /* buffer length */
         /* information buffer */
         0x00, 0x00, 0x00, 0x00, /* 0x00 format */
         0x02, 0x00, 0x00, 0x00, /* 0x04 messages count */
@@ -867,6 +1097,10 @@ test_message_parser_sms_read_multiple_pdu (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_sms_read_response_parse (
                   response,
@@ -916,7 +1150,7 @@ test_message_parser_sms_read_multiple_pdu (void)
 }
 
 static void
-test_message_parser_ussd (void)
+test_ussd (void)
 {
     MbimUssdResponse ussd_response;
     MbimUssdSessionState ussd_session_state;
@@ -963,6 +1197,10 @@ test_message_parser_ussd (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_ussd_response_parse (
                   response,
@@ -987,7 +1225,7 @@ test_message_parser_ussd (void)
 }
 
 static void
-test_message_parser_auth_akap (void)
+test_auth_akap (void)
 {
     const guint8 *res;
     guint32 res_len;
@@ -1058,8 +1296,11 @@ test_message_parser_auth_akap (void)
         0x73, 0x72
     };
 
-
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_auth_akap_response_parse (
                   response,
@@ -1099,7 +1340,7 @@ test_message_parser_auth_akap (void)
 }
 
 static void
-test_message_parser_stk_pac_notification (void)
+test_stk_pac_notification (void)
 {
     const guint8 *databuffer;
     guint32 databuffer_len;
@@ -1148,6 +1389,10 @@ test_message_parser_stk_pac_notification (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_stk_pac_notification_parse (
                   response,
@@ -1168,7 +1413,7 @@ test_message_parser_stk_pac_notification (void)
 }
 
 static void
-test_message_parser_stk_pac_response (void)
+test_stk_pac_response (void)
 {
     const guint8 *databuffer;
     g_autoptr(GError) error = NULL;
@@ -1177,7 +1422,7 @@ test_message_parser_stk_pac_response (void)
     const guint8 buffer [] =  {
         /* header */
         0x03, 0x00, 0x00, 0x80, /* type */
-        0x2C, 0x01, 0x00, 0x00, /* length */
+        0x30, 0x01, 0x00, 0x00, /* length */
         0x02, 0x00, 0x00, 0x00, /* transaction id */
         /* fragment header */
         0x01, 0x00, 0x00, 0x00, /* total */
@@ -1325,6 +1570,10 @@ test_message_parser_stk_pac_response (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    mbim_message_validate (response, &error);
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_stk_pac_response_parse (
                   response,
@@ -1340,7 +1589,7 @@ test_message_parser_stk_pac_response (void)
 }
 
 static void
-test_message_parser_stk_terminal_response (void)
+test_stk_terminal_response (void)
 {
     const guint8 *databuffer;
     guint32 databuffer_len;
@@ -1351,7 +1600,7 @@ test_message_parser_stk_terminal_response (void)
     const guint8 buffer [] =  {
         /* header */
         0x03, 0x00, 0x00, 0x80, /* type */
-        0x48, 0x01, 0x00, 0x00, /* length */
+        0x48, 0x00, 0x00, 0x00, /* length */
         0x02, 0x00, 0x00, 0x00, /* transaction id */
         /* fragment header */
         0x01, 0x00, 0x00, 0x00, /* total */
@@ -1381,6 +1630,10 @@ test_message_parser_stk_terminal_response (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_stk_terminal_response_response_parse (
                   response,
@@ -1401,7 +1654,7 @@ test_message_parser_stk_terminal_response (void)
 }
 
 static void
-test_message_parser_stk_envelope_response (void)
+test_stk_envelope_response (void)
 {
     const guint8 *databuffer;
     g_autoptr(GError) error = NULL;
@@ -1410,7 +1663,7 @@ test_message_parser_stk_envelope_response (void)
     const guint8 buffer [] =  {
         /* header */
         0x03, 0x00, 0x00, 0x80, /* type */
-        0x50, 0x01, 0x00, 0x00, /* length */
+        0x50, 0x00, 0x00, 0x00, /* length */
         0x02, 0x00, 0x00, 0x00, /* transaction id */
         /* fragment header */
         0x01, 0x00, 0x00, 0x00, /* total */
@@ -1446,6 +1699,10 @@ test_message_parser_stk_envelope_response (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_stk_envelope_response_parse (
                   response,
@@ -1461,7 +1718,7 @@ test_message_parser_stk_envelope_response (void)
 }
 
 static void
-test_message_parser_basic_connect_ip_packet_filters_none (void)
+test_basic_connect_ip_packet_filters_none (void)
 {
     guint32 n_filters;
     guint32 session_id;
@@ -1472,7 +1729,7 @@ test_message_parser_basic_connect_ip_packet_filters_none (void)
     const guint8 buffer [] =  {
         /* header */
         0x03, 0x00, 0x00, 0x80, /* type */
-        0x38, 0x01, 0x00, 0x00, /* length */
+        0x38, 0x00, 0x00, 0x00, /* length */
         0x02, 0x00, 0x00, 0x00, /* transaction id */
         /* fragment header */
         0x01, 0x00, 0x00, 0x00, /* total */
@@ -1491,6 +1748,10 @@ test_message_parser_basic_connect_ip_packet_filters_none (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_ip_packet_filters_response_parse (
                   response,
@@ -1506,7 +1767,7 @@ test_message_parser_basic_connect_ip_packet_filters_none (void)
 }
 
 static void
-test_message_parser_basic_connect_ip_packet_filters_one (void)
+test_basic_connect_ip_packet_filters_one (void)
 {
     guint32 n_filters;
     guint32 session_id;
@@ -1517,7 +1778,7 @@ test_message_parser_basic_connect_ip_packet_filters_one (void)
     const guint8 buffer [] =  {
         /* header */
         0x03, 0x00, 0x00, 0x80, /* type */
-        0x5C, 0x01, 0x00, 0x00, /* length */
+        0x5C, 0x00, 0x00, 0x00, /* length */
         0x02, 0x00, 0x00, 0x00, /* transaction id */
         /* fragment header */
         0x01, 0x00, 0x00, 0x00, /* total */
@@ -1555,6 +1816,10 @@ test_message_parser_basic_connect_ip_packet_filters_one (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_ip_packet_filters_response_parse (
                   response,
@@ -1582,7 +1847,7 @@ test_message_parser_basic_connect_ip_packet_filters_one (void)
 }
 
 static void
-test_message_parser_basic_connect_ip_packet_filters_two (void)
+test_basic_connect_ip_packet_filters_two (void)
 {
     guint32 n_filters;
     guint32 session_id;
@@ -1593,7 +1858,7 @@ test_message_parser_basic_connect_ip_packet_filters_two (void)
     const guint8 buffer [] =  {
         /* header */
         0x03, 0x00, 0x00, 0x80, /* type */
-        0x88, 0x01, 0x00, 0x00, /* length */
+        0x88, 0x00, 0x00, 0x00, /* length */
         0x02, 0x00, 0x00, 0x00, /* transaction id */
         /* fragment header */
         0x01, 0x00, 0x00, 0x00, /* total */
@@ -1653,6 +1918,10 @@ test_message_parser_basic_connect_ip_packet_filters_two (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_ip_packet_filters_response_parse (
                   response,
@@ -1688,7 +1957,7 @@ test_message_parser_basic_connect_ip_packet_filters_two (void)
 }
 
 static void
-test_message_parser_ms_firmware_id_get (void)
+test_ms_firmware_id_get (void)
 {
     const MbimUuid *firmware_id;
     g_autoptr(GError) error = NULL;
@@ -1725,6 +1994,10 @@ test_message_parser_ms_firmware_id_get (void)
     };
 
     response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
 
     g_assert (mbim_message_ms_firmware_id_get_response_parse (
                   response,
@@ -1737,7 +2010,7 @@ test_message_parser_ms_firmware_id_get (void)
 }
 
 static void
-test_message_parser_basic_connect_connect_short (void)
+test_basic_connect_connect_short (void)
 {
     guint32 session_id;
     MbimActivationState activation_state;
@@ -1769,6 +2042,10 @@ test_message_parser_basic_connect_connect_short (void)
 
     response = mbim_message_new (buffer, sizeof (buffer));
 
+    /* generic validation passes because the MBIM message format is fine */
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
     /* should fail! */
     g_assert (!mbim_message_connect_response_parse (
                   response,
@@ -1783,31 +2060,1488 @@ test_message_parser_basic_connect_connect_short (void)
     g_assert (error != NULL);
 }
 
+static void
+test_basic_connect_visible_providers_overflow (void)
+{
+    guint32 n_providers;
+    g_autoptr(GError) error = NULL;
+    g_autoptr(MbimProviderArray) providers = NULL;
+    g_autoptr(MbimMessage) response = NULL;
+    gboolean result;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0xB4, 0x00, 0x00, 0x00, /* length */
+        0x02, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0xA2, 0x89, 0xCC, 0x33, /* service id */
+        0xBC, 0xBB, 0x8B, 0x4F,
+        0xB6, 0xB0, 0x13, 0x3E,
+        0xC2, 0xAA, 0xE6, 0xDF,
+        0x08, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x84, 0x00, 0x00, 0x00, /* buffer length */
+        /* information buffer */
+        0x02, 0x00, 0x00, 0x00, /* 0x00 providers count */
+        0x14, 0x00, 0x00, 0x00, /* 0x04 provider 0 offset */
+        0x38, 0x00, 0x00, 0x00, /* 0x08 provider 0 length */
+        0x4C, 0x00, 0x00, 0x00, /* 0x0C provider 1 offset */
+        0x38, 0x00, 0x00, 0x00, /* 0x10 provider 1 length */
+        /* data buffer... struct provider 0 */
+        0x20, 0x00, 0x00, 0x80, /* 0x14 [0x00] id offset */     /* OFFSET WRONG (0x80 instead of 0x00) */
+        0x0A, 0x00, 0x00, 0x80, /* 0x18 [0x04] id length */     /* LENGTH WRONG (0x80 instead of 0x00) */
+        0x08, 0x00, 0x00, 0x00, /* 0x1C [0x08] state */
+        0x2C, 0x00, 0x00, 0x00, /* 0x20 [0x0C] name offset */
+        0x0C, 0x00, 0x00, 0x00, /* 0x24 [0x10] name length */
+        0x01, 0x00, 0x00, 0x00, /* 0x28 [0x14] cellular class */
+        0x0B, 0x00, 0x00, 0x00, /* 0x2C [0x18] rssi */
+        0x00, 0x00, 0x00, 0x00, /* 0x30 [0x1C] error rate */
+        0x32, 0x00, 0x31, 0x00, /* 0x34 [0x20] id string (10 bytes) */
+        0x34, 0x00, 0x30, 0x00,
+        0x33, 0x00, 0x00, 0x00,
+        0x4F, 0x00, 0x72, 0x00, /* 0x40 [0x2C] name string (12 bytes) */
+        0x61, 0x00, 0x6E, 0x00,
+        0x67, 0x00, 0x65, 0x00,
+        /* data buffer... struct provider 1 */
+        0x20, 0x00, 0x00, 0x00, /* 0x4C [0x00] id offset */
+        0x0A, 0x00, 0x00, 0x00, /* 0x50 [0x04] id length */
+        0x19, 0x00, 0x00, 0x00, /* 0x51 [0x08] state */
+        0x2C, 0x00, 0x00, 0x00, /* 0x54 [0x0C] name offset */
+        0x0C, 0x00, 0x00, 0x00, /* 0x58 [0x10] name length */
+        0x01, 0x00, 0x00, 0x00, /* 0x5C [0x14] cellular class */
+        0x0B, 0x00, 0x00, 0x00, /* 0x60 [0x18] rssi */
+        0x00, 0x00, 0x00, 0x00, /* 0x64 [0x1C] error rate */
+        0x32, 0x00, 0x31, 0x00, /* 0x68 [0x20] id string (10 bytes) */
+        0x34, 0x00, 0x30, 0x00,
+        0x33, 0x00, 0x00, 0x00,
+        0x4F, 0x00, 0x72, 0x00, /* 0x74 [0x2C] name string (12 bytes) */
+        0x61, 0x00, 0x6E, 0x00,
+        0x67, 0x00, 0x65, 0x00 };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    result = mbim_message_visible_providers_response_parse (response,
+                                                            &n_providers,
+                                                            &providers,
+                                                            &error);
+
+    g_assert (error != NULL);
+    g_assert (!result);
+}
+
+static void
+test_ms_basic_connect_extensions_base_stations (void)
+{
+    g_autoptr(GError)                              error = NULL;
+    g_autoptr(MbimMessage)                         response = NULL;
+    gboolean                                       result;
+    MbimDataClass                                  system_type;
+    g_autoptr(MbimCellInfoServingGsm)              gsm_serving_cell = NULL;
+    g_autoptr(MbimCellInfoServingUmts)             umts_serving_cell = NULL;
+    g_autoptr(MbimCellInfoServingTdscdma)          tdscdma_serving_cell = NULL;
+    g_autoptr(MbimCellInfoServingLte)              lte_serving_cell = NULL;
+    guint32                                        gsm_neighboring_cells_count;
+    g_autoptr(MbimCellInfoNeighboringGsmArray)     gsm_neighboring_cells = NULL;
+    guint32                                        umts_neighboring_cells_count;
+    g_autoptr(MbimCellInfoNeighboringUmtsArray)    umts_neighboring_cells = NULL;
+    guint32                                        tdscdma_neighboring_cells_count;
+    g_autoptr(MbimCellInfoNeighboringTdscdmaArray) tdscdma_neighboring_cells = NULL;
+    guint32                                        lte_neighboring_cells_count;
+    g_autoptr(MbimCellInfoNeighboringLteArray)     lte_neighboring_cells = NULL;
+    guint32                                        cdma_cells_count;
+    g_autoptr(MbimCellInfoCdmaArray)               cdma_cells = NULL;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0xD8, 0x00, 0x00, 0x00, /* length */
+        0x03, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0x3D, 0x01, 0xDC, 0xC5, /* service id */
+        0xFE, 0xF5, 0x4D, 0x05,
+        0x0D, 0x3A, 0xBE, 0xF7,
+        0x05, 0x8E, 0x9A, 0xAF,
+        0x0B, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0xA8, 0x00, 0x00, 0x00, /* buffer length */
+        /* information buffer */
+        0x60, 0x00, 0x00, 0x00, /* system type */
+        0x00, 0x00, 0x00, 0x00, /* gsm serving cell offset */
+        0x00, 0x00, 0x00, 0x00, /* gsm serving cell size */
+        0x00, 0x00, 0x00, 0x00, /* umts serving cell offset */
+        0x00, 0x00, 0x00, 0x00, /* umts serving cell size */
+        0x00, 0x00, 0x00, 0x00, /* tdscdma serving cell offset */
+        0x00, 0x00, 0x00, 0x00, /* tdscdma serving cell size */
+        0x4C, 0x00, 0x00, 0x00, /* lte serving cell offset*/
+        0x2E, 0x00, 0x00, 0x00, /* lte serving cell size*/
+        0xA0, 0x00, 0x00, 0x00, /* gsm network measurement report offset */
+        0x04, 0x00, 0x00, 0x00, /* gsm network measurement report size */
+        0xA4, 0x00, 0x00, 0x00, /* umts network measurement report offset */
+        0x04, 0x00, 0x00, 0x00, /* umts network measurement report size */
+        0x00, 0x00, 0x00, 0x00, /* tdscdma network measurement report offset */
+        0x00, 0x00, 0x00, 0x00, /* tdscdma network measurement report size */
+        0x7C, 0x00, 0x00, 0x00, /* lte network measurement report offset */
+        0x24, 0x00, 0x00, 0x00, /* lte network measurement report size */
+        0x00, 0x00, 0x00, 0x00, /* cdma network measurement report offset */
+        0x00, 0x00, 0x00, 0x00, /* cdma network measurement report size */
+        /* lte serving cell */
+/*4C*/  0x24, 0x00, 0x00, 0x00, /* provider id offset */
+        0x0A, 0x00, 0x00, 0x00, /* provider id size */
+        0x1F, 0xCD, 0x65, 0x04, /* cell id */
+        0x00, 0x19, 0x00, 0x00, /* earfcn */
+        0x36, 0x01, 0x00, 0x00, /* physical cell id */
+        0xFE, 0x6F, 0x00, 0x00, /* tac */
+        0x99, 0xFF, 0xFF, 0xFF, /* rsrp */
+        0xF4, 0xFF, 0xFF, 0xFF, /* rsrq */
+        0xFF, 0xFF, 0xFF, 0xFF, /* timing advance */
+        0x32, 0x00, 0x31, 0x00, /* provider id string */
+        0x34, 0x00, 0x30, 0x00,
+        0x37, 0x00, 0x00, 0x00,
+        /* lte network measurement report */
+/*7C*/  0x01, 0x00, 0x00, 0x00, /* element count */
+        0x00, 0x00, 0x00, 0x00, /* provider id offset */
+        0x00, 0x00, 0x00, 0x00, /* provider id size */
+        0xFF, 0xFF, 0xFF, 0xFF, /* cell id */
+        0xFF, 0xFF, 0xFF, 0xFF, /* earfcn */
+        0x36, 0x01, 0x00, 0x00, /* physical cell id */
+        0xFF, 0xFF, 0xFF, 0xFF, /* tac */
+        0x99, 0xFF, 0xFF, 0xFF, /* rsrp */
+        0xF4, 0xFF, 0xFF, 0xFF, /* rsrq */
+        /* gsm network measurement report */
+/*A0*/  0x00, 0x00, 0x00, 0x00,
+        /* umts network measurement report */
+/*A4*/  0x00, 0x00, 0x00, 0x00
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
+
+    result = (mbim_message_ms_basic_connect_extensions_base_stations_info_response_parse (
+                  response,
+                  &system_type,
+                  &gsm_serving_cell,
+                  &umts_serving_cell,
+                  &tdscdma_serving_cell,
+                  &lte_serving_cell,
+                  &gsm_neighboring_cells_count,
+                  &gsm_neighboring_cells,
+                  &umts_neighboring_cells_count,
+                  &umts_neighboring_cells,
+                  &tdscdma_neighboring_cells_count,
+                  &tdscdma_neighboring_cells,
+                  &lte_neighboring_cells_count,
+                  &lte_neighboring_cells,
+                  &cdma_cells_count,
+                  &cdma_cells,
+                  &error));
+
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_null (gsm_serving_cell);
+    g_assert_null (umts_serving_cell);
+    g_assert_null (tdscdma_serving_cell);
+    g_assert_nonnull (lte_serving_cell);
+    g_assert_cmpuint (gsm_neighboring_cells_count, ==, 0);
+    g_assert_null (gsm_neighboring_cells);
+    g_assert_cmpuint (umts_neighboring_cells_count, ==, 0);
+    g_assert_null (umts_neighboring_cells);
+    g_assert_cmpuint (tdscdma_neighboring_cells_count, ==, 0);
+    g_assert_null (tdscdma_neighboring_cells);
+    g_assert_cmpuint (lte_neighboring_cells_count, ==, 1);
+    g_assert_nonnull (lte_neighboring_cells);
+    g_assert_cmpuint (cdma_cells_count, ==, 0);
+    g_assert_null (cdma_cells);
+}
+
+static void
+test_ms_basic_connect_extensions_registration_parameters_0_unnamed_tlvs (void)
+{
+    g_autoptr(GError)             error = NULL;
+    g_autoptr(MbimMessage)        response = NULL;
+    gboolean                      result;
+    MbimMicoMode                  mico_mode;
+    MbimDrxCycle                  drx_cycle;
+    MbimLadnInfo                  ladn_info;
+    MbimDefaultPduActivationHint  pdu_hint;
+    gboolean                      re_register_if_needed;
+    GList                        *unnamed_ies = NULL;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x44, 0x00, 0x00, 0x00, /* length */
+        0x04, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0x3D, 0x01, 0xDC, 0xC5, /* service id */
+        0xFE, 0xF5, 0x4D, 0x05,
+        0x0D, 0x3A, 0xBE, 0xF7,
+        0x05, 0x8E, 0x9A, 0xAF,
+        0x11, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x14, 0x00, 0x00, 0x00, /* buffer length */
+        /* information buffer */
+        0x00, 0x00, 0x00, 0x00, /* mico mode */
+        0x00, 0x00, 0x00, 0x00, /* drx cycle */
+        0x00, 0x00, 0x00, 0x00, /* ladn info */
+        0x01, 0x00, 0x00, 0x00, /* pdu hint */
+        0x01, 0x00, 0x00, 0x00, /* re register if needed */
+        /* no unnamed TLVs */
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_extensions_v3_registration_parameters_response_parse (
+                  response,
+                  &mico_mode,
+                  &drx_cycle,
+                  &ladn_info,
+                  &pdu_hint,
+                  &re_register_if_needed,
+                  &unnamed_ies,
+                  &error));
+
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (mico_mode, ==, MBIM_MICO_MODE_DISABLED);
+    g_assert_cmpuint (drx_cycle, ==, MBIM_DRX_CYCLE_NOT_SPECIFIED);
+    g_assert_cmpuint (ladn_info, ==, MBIM_LADN_INFO_NOT_NEEDED);
+    g_assert_cmpuint (pdu_hint, ==, MBIM_DEFAULT_PDU_ACTIVATION_HINT_LIKELY);
+    g_assert_cmpuint (re_register_if_needed, ==, TRUE);
+    g_assert_cmpuint (g_list_length (unnamed_ies), ==, 0);
+}
+
+static void
+test_ms_basic_connect_extensions_registration_parameters_1_unnamed_tlv (void)
+{
+    g_autoptr(GError)             error = NULL;
+    g_autoptr(MbimMessage)        response = NULL;
+    gboolean                      result;
+    MbimMicoMode                  mico_mode;
+    MbimDrxCycle                  drx_cycle;
+    MbimLadnInfo                  ladn_info;
+    MbimDefaultPduActivationHint  pdu_hint;
+    gboolean                      re_register_if_needed;
+    GList                        *unnamed_ies = NULL;
+    MbimTlv                      *tlv;
+    g_autofree gchar             *tlv_str = NULL;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x58, 0x00, 0x00, 0x00, /* length */
+        0x04, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0x3D, 0x01, 0xDC, 0xC5, /* service id */
+        0xFE, 0xF5, 0x4D, 0x05,
+        0x0D, 0x3A, 0xBE, 0xF7,
+        0x05, 0x8E, 0x9A, 0xAF,
+        0x11, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x28, 0x00, 0x00, 0x00, /* buffer length */
+        /* information buffer */
+        0x00, 0x00, 0x00, 0x00, /* mico mode */
+        0x00, 0x00, 0x00, 0x00, /* drx cycle */
+        0x00, 0x00, 0x00, 0x00, /* ladn info */
+        0x01, 0x00, 0x00, 0x00, /* pdu hint */
+        0x01, 0x00, 0x00, 0x00, /* re register if needed */
+        /* First unnamed TLV */
+        0x0A, 0x00, 0x00, 0x00, /* TLV type MBIM_TLV_TYPE_WCHAR_STR, no padding */
+        0x0C, 0x00, 0x00, 0x00, /* TLV data length */
+        0x4F, 0x00, 0x72, 0x00, /* TLV data string */
+        0x61, 0x00, 0x6E, 0x00,
+        0x67, 0x00, 0x65, 0x00,
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_extensions_v3_registration_parameters_response_parse (
+                  response,
+                  &mico_mode,
+                  &drx_cycle,
+                  &ladn_info,
+                  &pdu_hint,
+                  &re_register_if_needed,
+                  &unnamed_ies,
+                  &error));
+
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (mico_mode, ==, MBIM_MICO_MODE_DISABLED);
+    g_assert_cmpuint (drx_cycle, ==, MBIM_DRX_CYCLE_NOT_SPECIFIED);
+    g_assert_cmpuint (ladn_info, ==, MBIM_LADN_INFO_NOT_NEEDED);
+    g_assert_cmpuint (pdu_hint, ==, MBIM_DEFAULT_PDU_ACTIVATION_HINT_LIKELY);
+    g_assert_cmpuint (re_register_if_needed, ==, TRUE);
+    g_assert_cmpuint (g_list_length (unnamed_ies), ==, 1);
+
+    tlv = (MbimTlv *)(unnamed_ies->data);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (tlv), ==, MBIM_TLV_TYPE_WCHAR_STR);
+
+    tlv_str = mbim_tlv_string_get (tlv, &error);
+    g_assert_no_error (error);
+    g_assert_cmpstr (tlv_str, ==, "Orange");
+
+    g_list_free_full (unnamed_ies, (GDestroyNotify)mbim_tlv_unref);
+}
+
+static void
+test_ms_basic_connect_extensions_registration_parameters_3_unnamed_tlvs (void)
+{
+    g_autoptr(GError)             error = NULL;
+    g_autoptr(MbimMessage)        response = NULL;
+    gboolean                      result;
+    MbimMicoMode                  mico_mode;
+    MbimDrxCycle                  drx_cycle;
+    MbimLadnInfo                  ladn_info;
+    MbimDefaultPduActivationHint  pdu_hint;
+    gboolean                      re_register_if_needed;
+    GList                        *unnamed_ies = NULL;
+    GList                        *iter;
+    MbimTlv                      *tlv;
+    g_autofree gchar             *tlv_str_1 = NULL;
+    const gchar                  *expected_tlv_str_1 = "abcde";
+    g_autofree gchar             *tlv_str_2 = NULL;
+    const gchar                  *expected_tlv_str_2 = "Orange";
+    const guint8                 *pco_3 = NULL;
+    guint32                       pco_3_size = 0;
+    const guint8                  expected_pco[] = { 0x01, 0x02, 0x03, 0x04,
+                                                     0x05, 0x06, 0x07, 0x08,
+                                                     0x09, 0x0A, 0x0B };
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x80, 0x00, 0x00, 0x00, /* length */
+        0x04, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0x3D, 0x01, 0xDC, 0xC5, /* service id */
+        0xFE, 0xF5, 0x4D, 0x05,
+        0x0D, 0x3A, 0xBE, 0xF7,
+        0x05, 0x8E, 0x9A, 0xAF,
+        0x11, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x50, 0x00, 0x00, 0x00, /* buffer length */
+        /* information buffer */
+        0x00, 0x00, 0x00, 0x00, /* mico mode */
+        0x00, 0x00, 0x00, 0x00, /* drx cycle */
+        0x00, 0x00, 0x00, 0x00, /* ladn info */
+        0x01, 0x00, 0x00, 0x00, /* pdu hint */
+        0x01, 0x00, 0x00, 0x00, /* re register if needed */
+        /* First unnamed TLV */
+        0x0A, 0x00, 0x00, 0x02, /* TLV type MBIM_TLV_TYPE_WCHAR_STR, padding 2 */
+        0x0A, 0x00, 0x00, 0x00, /* TLV data length */
+        0x61, 0x00, 0x62, 0x00, /* TLV data string */
+        0x63, 0x00, 0x64, 0x00,
+        0x65, 0x00, 0x00, 0x00,
+        /* Second unnamed TLV */
+        0x0A, 0x00, 0x00, 0x00, /* TLV type MBIM_TLV_TYPE_WCHAR_STR, no padding */
+        0x0C, 0x00, 0x00, 0x00, /* TLV data length */
+        0x4F, 0x00, 0x72, 0x00, /* TLV data string */
+        0x61, 0x00, 0x6E, 0x00,
+        0x67, 0x00, 0x65, 0x00,
+        /* Third unnamed TLV */
+        0x0D, 0x00, 0x00, 0x01, /* TLV type MBIM_TLV_TYPE_PCO, padding 1 */
+        0x0B, 0x00, 0x00, 0x00, /* TLV data length */
+        0x01, 0x02, 0x03, 0x04, /* TLV data bytes */
+        0x05, 0x06, 0x07, 0x08,
+        0x09, 0x0A, 0x0B, 0x00,
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_extensions_v3_registration_parameters_response_parse (
+                  response,
+                  &mico_mode,
+                  &drx_cycle,
+                  &ladn_info,
+                  &pdu_hint,
+                  &re_register_if_needed,
+                  &unnamed_ies,
+                  &error));
+
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (mico_mode, ==, MBIM_MICO_MODE_DISABLED);
+    g_assert_cmpuint (drx_cycle, ==, MBIM_DRX_CYCLE_NOT_SPECIFIED);
+    g_assert_cmpuint (ladn_info, ==, MBIM_LADN_INFO_NOT_NEEDED);
+    g_assert_cmpuint (pdu_hint, ==, MBIM_DEFAULT_PDU_ACTIVATION_HINT_LIKELY);
+    g_assert_cmpuint (re_register_if_needed, ==, TRUE);
+    g_assert_cmpuint (g_list_length (unnamed_ies), ==, 3);
+
+    iter = unnamed_ies;
+    tlv = (MbimTlv *)(iter->data);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (tlv), ==, MBIM_TLV_TYPE_WCHAR_STR);
+    tlv_str_1 = mbim_tlv_string_get (tlv, &error);
+    g_assert_no_error (error);
+    g_assert_cmpstr (tlv_str_1, ==, expected_tlv_str_1);
+
+    iter = g_list_next (iter);
+    tlv = (MbimTlv *)(iter->data);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (tlv), ==, MBIM_TLV_TYPE_WCHAR_STR);
+    tlv_str_2 = mbim_tlv_string_get (tlv, &error);
+    g_assert_no_error (error);
+    g_assert_cmpstr (tlv_str_2, ==, expected_tlv_str_2);
+
+    iter = g_list_next (iter);
+    tlv = (MbimTlv *)(iter->data);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (tlv), ==, MBIM_TLV_TYPE_PCO);
+    pco_3 = mbim_tlv_get_tlv_data (tlv, &pco_3_size);
+    g_assert_cmpuint (pco_3_size, ==, sizeof (expected_pco));
+    g_assert (memcmp (pco_3, expected_pco, sizeof (expected_pco)) == 0);
+
+    g_list_free_full (unnamed_ies, (GDestroyNotify)mbim_tlv_unref);
+}
+
+static void
+test_ms_basic_connect_v3_connect_0_unnamed_tlvs (void)
+{
+    g_autoptr(GError)       error = NULL;
+    g_autoptr(MbimMessage)  response = NULL;
+    gboolean                result;
+    GList                  *unnamed_ies = NULL;
+    guint32                 session_id;
+    MbimActivationState     activation_state;
+    MbimVoiceCallState      voice_call_state;
+    MbimContextIpType       ip_type;
+    MbimAccessMediaType     media_type = MBIM_ACCESS_MEDIA_TYPE_UNKNOWN;
+    g_autofree gchar       *access_string = NULL;
+    const MbimUuid         *context_type;
+    guint32                 nw_error;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x6C, 0x00, 0x00, 0x00, /* length */
+        0x04, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0xA2, 0x89, 0xCC, 0x33, /* service id */
+        0xBC, 0xBB, 0x8B, 0x4F,
+        0xB6, 0xB0, 0x13, 0x3E,
+        0xC2, 0xAA, 0xE6, 0xDF,
+        0x0C, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x3C, 0x00, 0x00, 0x00, /* buffer_length */
+        /* information buffer */
+        0x01, 0x00, 0x00, 0x00, /* session id */
+        0x01, 0x00, 0x00, 0x00, /* activation state */
+        0x00, 0x00, 0x00, 0x00, /* voice call state */
+        0x01, 0x00, 0x00, 0x00, /* ip type */
+        0x7E, 0x5E, 0x2A, 0x7E, /* context type */
+        0x4E, 0x6F, 0x72, 0x72,
+        0x73, 0x6B, 0x65, 0x6E,
+        0x7E, 0x5E, 0x2A, 0x7E,
+        0x00, 0x00, 0x00, 0x00, /* nw error */
+        0x01, 0x00, 0x00, 0x00, /* media type */
+        0x0A, 0x00, 0x00, 0x00, /* access string */
+        0x10, 0x00, 0x00, 0x00,
+        0x69, 0x00, 0x6E, 0x00,
+        0x74, 0x00, 0x65, 0x00,
+        0x72, 0x00, 0x6E, 0x00,
+        0x65, 0x00, 0x74, 0x00,
+        /* no unnamed TLVs */
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_v3_connect_response_parse (
+                  response,
+                  &session_id,
+                  &activation_state,
+                  &voice_call_state,
+                  &ip_type,
+                  &context_type,
+                  &nw_error,
+                  &media_type,
+                  &access_string,
+                  &unnamed_ies,
+                  &error));
+
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (session_id, ==, 1);
+    g_assert_cmpuint (activation_state, ==, MBIM_ACTIVATION_STATE_ACTIVATED);
+    g_assert_cmpuint (voice_call_state, ==, MBIM_VOICE_CALL_STATE_NONE);
+    g_assert_cmpuint (ip_type, ==, MBIM_CONTEXT_IP_TYPE_IPV4);
+    g_assert_cmpuint (mbim_uuid_to_context_type (context_type), ==, MBIM_CONTEXT_TYPE_INTERNET);
+    g_assert_cmpuint (media_type, ==, MBIM_ACCESS_MEDIA_TYPE_3GPP);
+    g_assert_cmpstr  (access_string, ==, "internet");
+    g_assert_cmpuint (g_list_length (unnamed_ies), ==, 0);
+}
+
+static void
+test_ms_basic_connect_v3_connect_0_unnamed_tlvs_empty_access_string (void)
+{
+    g_autoptr(GError)       error = NULL;
+    g_autoptr(MbimMessage)  response = NULL;
+    gboolean                result;
+    GList                  *unnamed_ies = NULL;
+    guint32                 session_id;
+    MbimActivationState     activation_state;
+    MbimVoiceCallState      voice_call_state;
+    MbimContextIpType       ip_type;
+    MbimAccessMediaType     media_type = MBIM_ACCESS_MEDIA_TYPE_UNKNOWN;
+    g_autofree gchar       *access_string = NULL;
+    const MbimUuid         *context_type;
+    guint32                 nw_error;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x60, 0x00, 0x00, 0x00, /* length */
+        0x04, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0xA2, 0x89, 0xCC, 0x33, /* service id */
+        0xBC, 0xBB, 0x8B, 0x4F,
+        0xB6, 0xB0, 0x13, 0x3E,
+        0xC2, 0xAA, 0xE6, 0xDF,
+        0x0C, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x30, 0x00, 0x00, 0x00, /* buffer_length */
+        /* information buffer */
+        0x01, 0x00, 0x00, 0x00, /* session id */
+        0x01, 0x00, 0x00, 0x00, /* activation state */
+        0x00, 0x00, 0x00, 0x00, /* voice call state */
+        0x01, 0x00, 0x00, 0x00, /* ip type */
+        0x7E, 0x5E, 0x2A, 0x7E, /* context type */
+        0x4E, 0x6F, 0x72, 0x72,
+        0x73, 0x6B, 0x65, 0x6E,
+        0x7E, 0x5E, 0x2A, 0x7E,
+        0x00, 0x00, 0x00, 0x00, /* nw error */
+        0x01, 0x00, 0x00, 0x00, /* media type */
+        0x0A, 0x00, 0x00, 0x00, /* access string empty */
+        0x00, 0x00, 0x00, 0x00,
+        /* no unnamed TLVs */
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_v3_connect_response_parse (
+                  response,
+                  &session_id,
+                  &activation_state,
+                  &voice_call_state,
+                  &ip_type,
+                  &context_type,
+                  &nw_error,
+                  &media_type,
+                  &access_string,
+                  &unnamed_ies,
+                  &error));
+
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (session_id, ==, 1);
+    g_assert_cmpuint (activation_state, ==, MBIM_ACTIVATION_STATE_ACTIVATED);
+    g_assert_cmpuint (voice_call_state, ==, MBIM_VOICE_CALL_STATE_NONE);
+    g_assert_cmpuint (ip_type, ==, MBIM_CONTEXT_IP_TYPE_IPV4);
+    g_assert_cmpuint (mbim_uuid_to_context_type (context_type), ==, MBIM_CONTEXT_TYPE_INTERNET);
+    g_assert_cmpuint (media_type, ==, MBIM_ACCESS_MEDIA_TYPE_3GPP);
+    g_assert_cmpstr  (access_string, ==, "");
+    g_assert_cmpuint (g_list_length (unnamed_ies), ==, 0);
+}
+
+static void
+test_ms_basic_connect_v3_connect_1_unnamed_tlv (void)
+{
+    g_autoptr(GError)       error = NULL;
+    g_autoptr(MbimMessage)  response = NULL;
+    gboolean                result;
+    GList                  *unnamed_ies = NULL;
+    guint32                 session_id;
+    MbimActivationState     activation_state;
+    MbimVoiceCallState      voice_call_state;
+    MbimContextIpType       ip_type;
+    MbimAccessMediaType     media_type = MBIM_ACCESS_MEDIA_TYPE_UNKNOWN;
+    g_autofree gchar       *access_string = NULL;
+    const MbimUuid         *context_type;
+    guint32                 nw_error;
+    MbimTlv                *tlv;
+    g_autofree gchar       *tlv_str = NULL;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x82, 0x00, 0x00, 0x00, /* length */
+        0x04, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0xA2, 0x89, 0xCC, 0x33, /* service id */
+        0xBC, 0xBB, 0x8B, 0x4F,
+        0xB6, 0xB0, 0x13, 0x3E,
+        0xC2, 0xAA, 0xE6, 0xDF,
+        0x0C, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x52, 0x00, 0x00, 0x00, /* buffer_length */
+        /* information buffer */
+        0x01, 0x00, 0x00, 0x00, /* session id */
+        0x01, 0x00, 0x00, 0x00, /* activation state */
+        0x00, 0x00, 0x00, 0x00, /* voice call state */
+        0x01, 0x00, 0x00, 0x00, /* ip type */
+        0x7E, 0x5E, 0x2A, 0x7E, /* context type */
+        0x4E, 0x6F, 0x72, 0x72,
+        0x73, 0x6B, 0x65, 0x6E,
+        0x7E, 0x5E, 0x2A, 0x7E,
+        0x00, 0x00, 0x00, 0x00, /* nw error */
+        0x01, 0x00, 0x00, 0x00, /* media type */
+        0x0A, 0x00, 0x00, 0x00, /* access string */
+        0x10, 0x00, 0x00, 0x00,
+        0x69, 0x00, 0x6E, 0x00,
+        0x74, 0x00, 0x65, 0x00,
+        0x72, 0x00, 0x6E, 0x00,
+        0x65, 0x00, 0x74, 0x00,
+        /* First unnamed TLV */
+        0x0A, 0x00, 0x00, 0x00, /* TLV type MBIM_TLV_TYPE_WCHAR_STR, no padding */
+        0x0C, 0x00, 0x00, 0x00, /* TLV data length */
+        0x4F, 0x00, 0x72, 0x00, /* TLV data string */
+        0x61, 0x00, 0x6E, 0x00,
+        0x67, 0x00, 0x65, 0x00,
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_v3_connect_response_parse (
+                  response,
+                  &session_id,
+                  &activation_state,
+                  &voice_call_state,
+                  &ip_type,
+                  &context_type,
+                  &nw_error,
+                  &media_type,
+                  &access_string,
+                  &unnamed_ies,
+                  &error));
+
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (session_id, ==, 1);
+    g_assert_cmpuint (activation_state, ==, MBIM_ACTIVATION_STATE_ACTIVATED);
+    g_assert_cmpuint (voice_call_state, ==, MBIM_VOICE_CALL_STATE_NONE);
+    g_assert_cmpuint (ip_type, ==, MBIM_CONTEXT_IP_TYPE_IPV4);
+    g_assert_cmpuint (mbim_uuid_to_context_type (context_type), ==, MBIM_CONTEXT_TYPE_INTERNET);
+    g_assert_cmpuint (media_type, ==, MBIM_ACCESS_MEDIA_TYPE_3GPP);
+    g_assert_cmpstr  (access_string, ==, "internet");
+    g_assert_cmpuint (g_list_length (unnamed_ies), ==, 1);
+
+    tlv = (MbimTlv *)(unnamed_ies->data);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (tlv), ==, MBIM_TLV_TYPE_WCHAR_STR);
+
+    tlv_str = mbim_tlv_string_get (tlv, &error);
+    g_assert_no_error (error);
+    g_assert_cmpstr (tlv_str, ==, "Orange");
+
+    g_list_free_full (unnamed_ies, (GDestroyNotify)mbim_tlv_unref);
+}
+
+static void
+test_ms_basic_connect_v3_connect_3_unnamed_tlvs (void)
+{
+    g_autoptr(GError)       error = NULL;
+    g_autoptr(MbimMessage)  response = NULL;
+    gboolean                result;
+    GList                  *unnamed_ies = NULL;
+    guint32                 session_id;
+    MbimActivationState     activation_state;
+    MbimVoiceCallState      voice_call_state;
+    MbimContextIpType       ip_type;
+    MbimAccessMediaType     media_type = MBIM_ACCESS_MEDIA_TYPE_UNKNOWN;
+    g_autofree gchar       *access_string = NULL;
+    const MbimUuid         *context_type;
+    guint32                 nw_error;
+    GList                  *iter;
+    MbimTlv                *tlv;
+    g_autofree gchar       *tlv_str_1 = NULL;
+    const gchar            *expected_tlv_str_1 = "abcde";
+    g_autofree gchar       *tlv_str_2 = NULL;
+    const gchar            *expected_tlv_str_2 = "Orange";
+    const guint8           *pco_3 = NULL;
+    guint32                 pco_3_size = 0;
+    const guint8            expected_pco[] = { 0x01, 0x02, 0x03, 0x04,
+                                               0x05, 0x06, 0x07, 0x08,
+                                               0x09, 0x0A, 0x0B };
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0xAA, 0x00, 0x00, 0x00, /* length */
+        0x04, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0xA2, 0x89, 0xCC, 0x33, /* service id */
+        0xBC, 0xBB, 0x8B, 0x4F,
+        0xB6, 0xB0, 0x13, 0x3E,
+        0xC2, 0xAA, 0xE6, 0xDF,
+        0x0C, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x7A, 0x00, 0x00, 0x00, /* buffer_length */
+        /* information buffer */
+        0x01, 0x00, 0x00, 0x00, /* session id */
+        0x01, 0x00, 0x00, 0x00, /* activation state */
+        0x00, 0x00, 0x00, 0x00, /* voice call state */
+        0x01, 0x00, 0x00, 0x00, /* ip type */
+        0x7E, 0x5E, 0x2A, 0x7E, /* context type */
+        0x4E, 0x6F, 0x72, 0x72,
+        0x73, 0x6B, 0x65, 0x6E,
+        0x7E, 0x5E, 0x2A, 0x7E,
+        0x00, 0x00, 0x00, 0x00, /* nw error */
+        0x01, 0x00, 0x00, 0x00, /* media type */
+        0x0A, 0x00, 0x00, 0x00, /* access string */
+        0x10, 0x00, 0x00, 0x00,
+        0x69, 0x00, 0x6E, 0x00,
+        0x74, 0x00, 0x65, 0x00,
+        0x72, 0x00, 0x6E, 0x00,
+        0x65, 0x00, 0x74, 0x00,
+        /* First unnamed TLV */
+        0x0A, 0x00, 0x00, 0x02, /* TLV type MBIM_TLV_TYPE_WCHAR_STR, padding 2 */
+        0x0A, 0x00, 0x00, 0x00, /* TLV data length */
+        0x61, 0x00, 0x62, 0x00, /* TLV data string */
+        0x63, 0x00, 0x64, 0x00,
+        0x65, 0x00, 0x00, 0x00,
+        /* Second unnamed TLV */
+        0x0A, 0x00, 0x00, 0x00, /* TLV type MBIM_TLV_TYPE_WCHAR_STR, no padding */
+        0x0C, 0x00, 0x00, 0x00, /* TLV data length */
+        0x4F, 0x00, 0x72, 0x00, /* TLV data string */
+        0x61, 0x00, 0x6E, 0x00,
+        0x67, 0x00, 0x65, 0x00,
+        /* Third unnamed TLV */
+        0x0D, 0x00, 0x00, 0x01, /* TLV type MBIM_TLV_TYPE_PCO, padding 1 */
+        0x0B, 0x00, 0x00, 0x00, /* TLV data length */
+        0x01, 0x02, 0x03, 0x04, /* TLV data bytes */
+        0x05, 0x06, 0x07, 0x08,
+        0x09, 0x0A, 0x0B, 0x00,
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_v3_connect_response_parse (
+                  response,
+                  &session_id,
+                  &activation_state,
+                  &voice_call_state,
+                  &ip_type,
+                  &context_type,
+                  &nw_error,
+                  &media_type,
+                  &access_string,
+                  &unnamed_ies,
+                  &error));
+
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (session_id, ==, 1);
+    g_assert_cmpuint (activation_state, ==, MBIM_ACTIVATION_STATE_ACTIVATED);
+    g_assert_cmpuint (voice_call_state, ==, MBIM_VOICE_CALL_STATE_NONE);
+    g_assert_cmpuint (ip_type, ==, MBIM_CONTEXT_IP_TYPE_IPV4);
+    g_assert_cmpuint (mbim_uuid_to_context_type (context_type), ==, MBIM_CONTEXT_TYPE_INTERNET);
+    g_assert_cmpuint (media_type, ==, MBIM_ACCESS_MEDIA_TYPE_3GPP);
+    g_assert_cmpstr  (access_string, ==, "internet");
+    g_assert_cmpuint (g_list_length (unnamed_ies), ==, 3);
+
+
+    iter = unnamed_ies;
+    tlv = (MbimTlv *)(iter->data);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (tlv), ==, MBIM_TLV_TYPE_WCHAR_STR);
+    tlv_str_1 = mbim_tlv_string_get (tlv, &error);
+    g_assert_no_error (error);
+    g_assert_cmpstr (tlv_str_1, ==, expected_tlv_str_1);
+
+    iter = g_list_next (iter);
+    tlv = (MbimTlv *)(iter->data);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (tlv), ==, MBIM_TLV_TYPE_WCHAR_STR);
+    tlv_str_2 = mbim_tlv_string_get (tlv, &error);
+    g_assert_no_error (error);
+    g_assert_cmpstr (tlv_str_2, ==, expected_tlv_str_2);
+
+    iter = g_list_next (iter);
+    tlv = (MbimTlv *)(iter->data);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (tlv), ==, MBIM_TLV_TYPE_PCO);
+    pco_3 = mbim_tlv_get_tlv_data (tlv, &pco_3_size);
+    g_assert_cmpuint (pco_3_size, ==, sizeof (expected_pco));
+    g_assert (memcmp (pco_3, expected_pco, sizeof (expected_pco)) == 0);
+
+    g_list_free_full (unnamed_ies, (GDestroyNotify)mbim_tlv_unref);
+}
+
+static void
+test_ms_basic_connect_extensions_device_caps_v3 (void)
+{
+    g_autoptr(GError)       error = NULL;
+    g_autoptr(MbimMessage)  response = NULL;
+    gboolean                result;
+    MbimDeviceType          device_type;
+    MbimVoiceClass          voice_class;
+    MbimCellularClass       cellular_class;
+    MbimSimClass            sim_class;
+    MbimDataClassV3         data_class;
+    MbimDataSubclass        data_subclass;
+    MbimSmsCaps             sms_caps;
+    MbimCtrlCaps            ctrl_caps;
+    guint32                 max_sessions;
+    guint32                 wcdma_band_class = 0;
+    guint32                 lte_band_class_array_size = 0;
+    g_autofree guint16     *lte_band_class_array = NULL;
+    guint32                 nr_band_class_array_size = 0;
+    g_autofree guint16     *nr_band_class_array = NULL;
+    g_autofree gchar       *custom_data_class = NULL;
+    g_autofree gchar       *device_id = NULL;
+    g_autofree gchar       *firmware_info = NULL;
+    g_autofree gchar       *hardware_info = NULL;
+    guint32                 executor_index;
+    static const guint16    expected_lte_band_class_array[] = {
+        1, 2, 3, 4, 5, 7, 8, 12, 13, 14, 17, 18, 19, 20, 25, 26, 28, 29, 30, 32, 34, 38, 39, 40, 41, 42, 43, 46, 48
+    };
+    static const guint16    expected_nr_band_class_array[] = {
+        1, 2, 3, 5, 7, 8, 20, 25, 28, 30, 38, 40, 41, 48, 66, 71, 77, 78, 79
+    };
+
+    const guint8 buffer [] =  {
+        0x03, 0x00, 0x00, 0x80, 0x68, 0x01, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x3D, 0x01, 0xDC, 0xC5, 0xFE, 0xF5, 0x4D, 0x05, 0x0D, 0x3A, 0xBE, 0xF7,
+        0x05, 0x8E, 0x9A, 0xAF, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x01, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+        0x7C, 0x00, 0x00, 0x80, 0x03, 0x00, 0x00, 0x00, 0xA3, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x9B, 0x00, 0x00, 0x00,
+        0x0B, 0x00, 0x00, 0x02, 0x3A, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04, 0x00,
+        0x05, 0x00, 0x07, 0x00, 0x08, 0x00, 0x0C, 0x00, 0x0D, 0x00, 0x0E, 0x00, 0x11, 0x00, 0x12, 0x00,
+        0x13, 0x00, 0x14, 0x00, 0x19, 0x00, 0x1A, 0x00, 0x1C, 0x00, 0x1D, 0x00, 0x1E, 0x00, 0x20, 0x00,
+        0x22, 0x00, 0x26, 0x00, 0x27, 0x00, 0x28, 0x00, 0x29, 0x00, 0x2A, 0x00, 0x2B, 0x00, 0x2E, 0x00,
+        0x30, 0x00, 0x00, 0x00, 0x0B, 0x00, 0x00, 0x02, 0x26, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00,
+        0x03, 0x00, 0x05, 0x00, 0x07, 0x00, 0x08, 0x00, 0x14, 0x00, 0x19, 0x00, 0x1C, 0x00, 0x1E, 0x00,
+        0x26, 0x00, 0x28, 0x00, 0x29, 0x00, 0x30, 0x00, 0x42, 0x00, 0x47, 0x00, 0x4D, 0x00, 0x4E, 0x00,
+        0x4F, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x02, 0x0A, 0x00, 0x00, 0x00, 0x48, 0x00, 0x53, 0x00,
+        0x50, 0x00, 0x41, 0x00, 0x2B, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x02, 0x1E, 0x00, 0x00, 0x00,
+        0x38, 0x00, 0x36, 0x00, 0x32, 0x00, 0x31, 0x00, 0x34, 0x00, 0x36, 0x00, 0x30, 0x00, 0x35, 0x00,
+        0x30, 0x00, 0x30, 0x00, 0x38, 0x00, 0x34, 0x00, 0x35, 0x00, 0x35, 0x00, 0x35, 0x00, 0x00, 0x00,
+        0x0A, 0x00, 0x00, 0x00, 0x3C, 0x00, 0x00, 0x00, 0x38, 0x00, 0x31, 0x00, 0x36, 0x00, 0x30, 0x00,
+        0x30, 0x00, 0x2E, 0x00, 0x30, 0x00, 0x30, 0x00, 0x30, 0x00, 0x30, 0x00, 0x2E, 0x00, 0x39, 0x00,
+        0x39, 0x00, 0x2E, 0x00, 0x32, 0x00, 0x39, 0x00, 0x2E, 0x00, 0x31, 0x00, 0x37, 0x00, 0x2E, 0x00,
+        0x31, 0x00, 0x39, 0x00, 0x5F, 0x00, 0x47, 0x00, 0x43, 0x00, 0x0D, 0x00, 0x0A, 0x00, 0x42, 0x00,
+        0x39, 0x00, 0x30, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x56, 0x00, 0x31, 0x00,
+        0x2E, 0x00, 0x30, 0x00, 0x2E, 0x00, 0x36, 0x00
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_extensions_v3_device_caps_response_parse (
+                response,
+                &device_type,
+                &cellular_class,
+                &voice_class,
+                &sim_class,
+                &data_class,
+                &sms_caps,
+                &ctrl_caps,
+                &data_subclass,
+                &max_sessions,
+                &executor_index,
+                &wcdma_band_class,
+                &lte_band_class_array_size,
+                &lte_band_class_array,
+                &nr_band_class_array_size,
+                &nr_band_class_array,
+                &custom_data_class,
+                &device_id,
+                &firmware_info,
+                &hardware_info,
+                &error));
+
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (device_type, ==, MBIM_DEVICE_TYPE_EMBEDDED);
+    g_assert_cmpuint (cellular_class, ==, MBIM_CELLULAR_CLASS_GSM);
+    g_assert_cmpuint (voice_class, ==, MBIM_VOICE_CLASS_NO_VOICE);
+    g_assert_cmpuint (sim_class, ==, MBIM_SIM_CLASS_REMOVABLE);
+    g_assert_cmpuint (data_class, ==, (MBIM_DATA_CLASS_V3_UMTS |
+                                       MBIM_DATA_CLASS_V3_HSDPA |
+                                       MBIM_DATA_CLASS_V3_HSUPA |
+                                       MBIM_DATA_CLASS_V3_LTE |
+                                       MBIM_DATA_CLASS_V3_5G |
+                                       MBIM_DATA_CLASS_V3_CUSTOM));
+    g_assert_cmpuint (sms_caps, ==, (MBIM_SMS_CAPS_PDU_RECEIVE |
+                                     MBIM_SMS_CAPS_PDU_SEND));
+    g_assert_cmpuint (ctrl_caps, ==, (MBIM_CTRL_CAPS_REG_MANUAL |
+                                      MBIM_CTRL_CAPS_HW_RADIO_SWITCH |
+                                      MBIM_CTRL_CAPS_ESIM |
+                                      MBIM_CTRL_CAPS_SIM_HOT_SWAP_CAPABLE));
+    g_assert_cmpuint (data_subclass, ==, (MBIM_DATA_SUBCLASS_5G_ENDC |
+                                          MBIM_DATA_SUBCLASS_5G_NR));
+    g_assert_cmpuint (max_sessions, ==, 2);
+    g_assert_cmpuint (executor_index, ==, 0);
+    g_assert_cmpuint (wcdma_band_class, ==, (1 << (1 - 1) |
+                                             1 << (2 - 1) |
+                                             1 << (4 - 1) |
+                                             1 << (5 - 1) |
+                                             1 << (8 - 1)));
+    g_assert_cmpuint (G_N_ELEMENTS (expected_lte_band_class_array), ==, lte_band_class_array_size);
+    g_assert (memcmp (lte_band_class_array, expected_lte_band_class_array, lte_band_class_array_size * sizeof (guint16)) == 0);
+    g_assert_cmpuint (G_N_ELEMENTS (expected_nr_band_class_array), ==, nr_band_class_array_size);
+    g_assert (memcmp (nr_band_class_array, expected_nr_band_class_array, nr_band_class_array_size * sizeof (guint16)) == 0);
+    g_assert_cmpstr (custom_data_class, ==, "HSPA+");
+    g_assert_cmpstr (device_id, ==, "862146050084555");
+    g_assert_cmpstr (firmware_info, ==, "81600.0000.99.29.17.19_GC\r\nB90");
+    g_assert_cmpstr (hardware_info, ==, "V1.0.6");
+}
+
+static void
+test_ms_basic_connect_extensions_wake_reason_command (void)
+{
+    g_autoptr(GError)       error = NULL;
+    g_autoptr(MbimMessage)  response = NULL;
+    gboolean                result;
+    MbimWakeType            wake_type;
+    guint32                 session_id;
+    g_autoptr(MbimTlv)      wake_tlv = NULL;
+    const MbimUuid         *service = NULL;
+    guint32                 cid = 0;
+    guint32                 payload_size = 0;
+    g_autofree guint8      *payload = NULL;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x5C, 0x00, 0x00, 0x00, /* length */
+        0x04, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0x3D, 0x01, 0xDC, 0xC5, /* service id */
+        0xFE, 0xF5, 0x4D, 0x05,
+        0x0D, 0x3A, 0xBE, 0xF7,
+        0x05, 0x8E, 0x9A, 0xAF,
+        0x13, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x2C, 0x00, 0x00, 0x00, /* buffer_length */
+        /* information buffer */
+        0x01, 0x00, 0x00, 0x00, /* wake type: cid indication */
+        0x02, 0x00, 0x00, 0x00, /* session id */
+        /* TLV */
+        0x10, 0x00, 0x00, 0x00, /* TLV type MBIM_TLV_TYPE_WAKE_COMMAND, padding 0 */
+        0x1C, 0x00, 0x00, 0x00, /* TLV data length */
+        0xA2, 0x89, 0xCC, 0x33, /* service id: basic connect */
+        0xBC, 0xBB, 0x8B, 0x4F,
+        0xB6, 0xB0, 0x13, 0x3E,
+        0xC2, 0xAA, 0xE6, 0xDF,
+        0x0B, 0x00, 0x00, 0x00, /* command id: signal state */
+        0x00, 0x00, 0x00, 0x00, /* payload offset: none */
+        0x00, 0x00, 0x00, 0x00, /* payload size: none */
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_extensions_v3_wake_reason_response_parse (
+                  response,
+                  &wake_type,
+                  &session_id,
+                  &wake_tlv,
+                  &error));
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (wake_type, ==, MBIM_WAKE_TYPE_CID_INDICATION);
+    g_assert_cmpuint (session_id, ==, 2);
+    g_assert_nonnull (wake_tlv);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (wake_tlv), ==, MBIM_TLV_TYPE_WAKE_COMMAND);
+
+    result = (mbim_tlv_wake_command_get (wake_tlv,
+                                         &service,
+                                         &cid,
+                                         &payload_size,
+                                         &payload,
+                                         &error));
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (mbim_uuid_to_service (service), ==, MBIM_SERVICE_BASIC_CONNECT);
+    g_assert_cmpuint (cid, ==, MBIM_CID_BASIC_CONNECT_SIGNAL_STATE);
+    g_assert_cmpuint (payload_size, ==, 0);
+    g_assert_null (payload);
+}
+
+static void
+test_ms_basic_connect_extensions_wake_reason_command_payload (void)
+{
+    g_autoptr(GError)       error = NULL;
+    g_autoptr(MbimMessage)  response = NULL;
+    gboolean                result;
+    MbimWakeType            wake_type;
+    guint32                 session_id;
+    g_autoptr(MbimTlv)      wake_tlv = NULL;
+    const MbimUuid         *service = NULL;
+    guint32                 cid = 0;
+    guint32                 payload_size = 0;
+    g_autofree guint8      *payload = NULL;
+    guint32                 payload_uint;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x60, 0x00, 0x00, 0x00, /* length */
+        0x04, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0x3D, 0x01, 0xDC, 0xC5, /* service id */
+        0xFE, 0xF5, 0x4D, 0x05,
+        0x0D, 0x3A, 0xBE, 0xF7,
+        0x05, 0x8E, 0x9A, 0xAF,
+        0x13, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x30, 0x00, 0x00, 0x00, /* buffer_length */
+        /* information buffer */
+        0x00, 0x00, 0x00, 0x00, /* wake type: cid response */
+        0x02, 0x00, 0x00, 0x00, /* session id */
+        /* TLV */
+        0x10, 0x00, 0x00, 0x00, /* TLV type MBIM_TLV_TYPE_WAKE_COMMAND, padding 0 */
+        0x20, 0x00, 0x00, 0x00, /* TLV data length */
+        0xA2, 0x89, 0xCC, 0x33, /* service id: basic connect */
+        0xBC, 0xBB, 0x8B, 0x4F,
+        0xB6, 0xB0, 0x13, 0x3E,
+        0xC2, 0xAA, 0xE6, 0xDF,
+        0x0C, 0x00, 0x00, 0x00, /* command id: connect */
+        0x1C, 0x00, 0x00, 0x00, /* payload offset: 28 */
+        0x04, 0x00, 0x00, 0x00, /* payload size: 4 */
+        0x01, 0x00, 0x00, 0x00, /* payload: a guint32 */
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_extensions_v3_wake_reason_response_parse (
+                  response,
+                  &wake_type,
+                  &session_id,
+                  &wake_tlv,
+                  &error));
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (wake_type, ==, MBIM_WAKE_TYPE_CID_RESPONSE);
+    g_assert_cmpuint (session_id, ==, 2);
+    g_assert_nonnull (wake_tlv);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (wake_tlv), ==, MBIM_TLV_TYPE_WAKE_COMMAND);
+
+    result = (mbim_tlv_wake_command_get (wake_tlv,
+                                         &service,
+                                         &cid,
+                                         &payload_size,
+                                         &payload,
+                                         &error));
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (mbim_uuid_to_service (service), ==, MBIM_SERVICE_BASIC_CONNECT);
+    g_assert_cmpuint (cid, ==, MBIM_CID_BASIC_CONNECT_CONNECT);
+    g_assert_cmpuint (payload_size, ==, 4);
+    g_assert_nonnull (payload);
+
+    memcpy (&payload_uint, payload, payload_size);
+    payload_uint = GUINT32_FROM_LE (payload_uint);
+    g_assert_cmpuint (payload_uint, ==, 1);
+}
+
+static void
+test_ms_basic_connect_extensions_wake_reason_packet (void)
+{
+    g_autoptr(GError)       error = NULL;
+    g_autoptr(MbimMessage)  response = NULL;
+    gboolean                result;
+    MbimWakeType            wake_type;
+    guint32                 session_id;
+    g_autoptr(MbimTlv)      wake_tlv = NULL;
+    guint32                 filter_id = 0;
+    guint32                 original_packet_size = 0;
+    guint32                 packet_size = 0;
+    g_autofree guint8      *packet = NULL;
+    const guint8            expected_packet[] = { 0x01, 0x02, 0x03, 0x04,
+                                                  0x05, 0x06, 0x07, 0x08,
+                                                  0x09, 0x0A };
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x5C, 0x00, 0x00, 0x00, /* length */
+        0x04, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done_message */
+        0x3D, 0x01, 0xDC, 0xC5, /* service id */
+        0xFE, 0xF5, 0x4D, 0x05,
+        0x0D, 0x3A, 0xBE, 0xF7,
+        0x05, 0x8E, 0x9A, 0xAF,
+        0x13, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x2C, 0x00, 0x00, 0x00, /* buffer_length */
+        /* information buffer */
+        0x02, 0x00, 0x00, 0x00, /* wake type: packet */
+        0x02, 0x00, 0x00, 0x00, /* session id */
+        /* TLV */
+        0x11, 0x00, 0x00, 0x02, /* TLV type MBIM_TLV_TYPE_WAKE_PACKET, padding 2 */
+        0x1A, 0x00, 0x00, 0x00, /* TLV data length */
+        0x0B, 0x00, 0x00, 0x00, /* filter id */
+        0x0C, 0x00, 0x00, 0x00, /* original packet size: 12 */
+        0x10, 0x00, 0x00, 0x00, /* packet offset: 16 */
+        0x0A, 0x00, 0x00, 0x00, /* packet size: 10 */
+        0x01, 0x02, 0x03, 0x04,
+        0x05, 0x06, 0x07, 0x08,
+        0x09, 0x0A, 0x00, 0x00, /* last 2 bytes padding */
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 3, 0);
+
+    result = (mbim_message_ms_basic_connect_extensions_v3_wake_reason_response_parse (
+                  response,
+                  &wake_type,
+                  &session_id,
+                  &wake_tlv,
+                  &error));
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (wake_type, ==, MBIM_WAKE_TYPE_PACKET);
+    g_assert_cmpuint (session_id, ==, 2);
+    g_assert_nonnull (wake_tlv);
+    g_assert_cmpuint (mbim_tlv_get_tlv_type (wake_tlv), ==, MBIM_TLV_TYPE_WAKE_PACKET);
+
+    result = (mbim_tlv_wake_packet_get (wake_tlv,
+                                        &filter_id,
+                                        &original_packet_size,
+                                        &packet_size,
+                                        &packet,
+                                        &error));
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (filter_id, ==, 0x0B);
+    g_assert_cmpuint (original_packet_size, ==, 12);
+    g_assert_cmpuint (packet_size, ==, sizeof (expected_packet));
+    g_assert_nonnull (packet);
+    g_assert (memcmp (packet, expected_packet, sizeof (expected_packet)) == 0);
+}
+
+static void
+test_ms_uicc_low_level_access_application_list (void)
+{
+    g_autoptr(GError)                   error = NULL;
+    g_autoptr(MbimMessage)              response = NULL;
+    gboolean                            result;
+    guint32                             version;
+    guint32                             application_count;
+    guint32                             active_application_index;
+    guint32                             application_list_size_bytes;
+    g_autoptr(MbimUiccApplicationArray) applications = NULL;
+
+    const guint8  expected_application_id[] = { 0xA0, 0x00, 0x00, 0x00,
+                                                0x87, 0x10, 0x02, 0xFF,
+                                                0x34, 0xFF, 0x07, 0x89,
+                                                0x31, 0x2E, 0x30, 0xFF };
+    const gchar  *expected_application_name = "Movistar";
+    const guint8  expected_pin_key_references[] = { 0x01, 0x81 };
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x84, 0x00, 0x00, 0x00, /* length */
+        0x03, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done message */
+        0xC2, 0xF6, 0x58, 0x8E, /* service id */
+        0xF0, 0x37, 0x4B, 0xC9,
+        0x86, 0x65, 0xF4, 0xD4,
+        0x4B, 0xD0, 0x93, 0x67,
+        0x07, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x54, 0x00, 0x00, 0x00, /* buffer_length */
+        /* information buffer */
+        0x01, 0x00, 0x00, 0x00, /* version: 1 */
+        0x01, 0x00, 0x00, 0x00, /* app count: 1 */
+        0x00, 0x00, 0x00, 0x00, /* active app index: 0 */
+        0x3C, 0x00, 0x00, 0x00, /* app list size bytes: 60 */
+        0x18, 0x00, 0x00, 0x00, /* application 0 offset: 24 bytes */
+        0x3C, 0x00, 0x00, 0x00, /* application 0 length: 60 bytes */
+        /* application 0 */
+        0x04, 0x00, 0x00, 0x00, /* application type: usim */
+        0x20, 0x00, 0x00, 0x00, /* application id offset: 32 bytes */
+        0x10, 0x00, 0x00, 0x00, /* application id length: 16 bytes */
+        0x30, 0x00, 0x00, 0x00, /* application name offset: 48 bytes */
+        0x08, 0x00, 0x00, 0x00, /* application name length: 8 bytes */
+        0x02, 0x00, 0x00, 0x00, /* num pin key refs: 2 */
+        0x38, 0x00, 0x00, 0x00, /* pin key refs offset: 56 bytes */
+        0x02, 0x00, 0x00, 0x00, /* pin key refs length: 2 bytes */
+        /* application 0 databuffer */
+        0xA0, 0x00, 0x00, 0x00, /* application id */
+        0x87, 0x10, 0x02, 0xFF,
+        0x34, 0xFF, 0x07, 0x89,
+        0x31, 0x2E, 0x30, 0xFF,
+        0x4D, 0x6F, 0x76, 0x69, /* application name */
+        0x73, 0x74, 0x61, 0x72,
+        0x01, 0x81, 0x00, 0x00, /* pin key refs plus 2 padding bytes */
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
+
+    result = (mbim_message_ms_uicc_low_level_access_application_list_response_parse (
+                  response,
+                  &version,
+                  &application_count,
+                  &active_application_index,
+                  &application_list_size_bytes,
+                  &applications,
+                  &error));
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (version, ==, 1);
+    g_assert_cmpuint (application_count, ==, 1);
+    g_assert_cmpuint (active_application_index, ==, 0);
+    g_assert_cmpuint (application_list_size_bytes, ==, 60);
+    g_assert_cmpuint (applications[0]->application_id_size, ==, sizeof (expected_application_id));
+    g_assert (memcmp (applications[0]->application_id, expected_application_id, sizeof (expected_application_id)) == 0);
+    g_assert (g_strcmp0 (applications[0]->application_name, expected_application_name) == 0);
+    g_assert_cmpuint (applications[0]->pin_key_reference_count, ==, 2);
+    g_assert_cmpuint (applications[0]->pin_key_references_size, ==, sizeof (expected_pin_key_references));
+    g_assert (memcmp (applications[0]->pin_key_references, expected_pin_key_references, sizeof (expected_pin_key_references)) == 0);
+}
+
+static void
+test_google_carrier_lock (void)
+{
+    g_autoptr(GError)         error = NULL;
+    g_autoptr(MbimMessage)    response = NULL;
+    gboolean                  result;
+    MbimCarrierLockStatus     carrier_lock_status;
+    MbimCarrierLockModemState modem_state;
+    MbimCarrierLockCause      carrier_lock_cause;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x03, 0x00, 0x00, 0x80, /* type */
+        0x3C, 0x00, 0x00, 0x00, /* length */
+        0x03, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done message */
+        0x3E, 0x1E, 0x92, 0xCF, /* service id */
+        0xC5, 0x3D, 0x4F, 0x14,
+        0x85, 0xD0, 0xA8, 0x6A,
+        0xD9, 0xE1, 0x22, 0x45,
+        0x01, 0x00, 0x00, 0x00, /* command id */
+        0x00, 0x00, 0x00, 0x00, /* status code */
+        0x0C, 0x00, 0x00, 0x00, /* buffer length */
+        /* information buffer */
+        0x01, 0x00, 0x00, 0x00, /* carrier lock status*/
+        0x00, 0x00, 0x00, 0x00, /* modem state */
+        0x00, 0x00, 0x00, 0x00, /* carrier lock cause */
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
+
+    result = mbim_message_google_carrier_lock_response_parse (
+                 response,
+                 &carrier_lock_status,
+                 &modem_state,
+                 &carrier_lock_cause,
+                 &error);
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (carrier_lock_status, ==, MBIM_CARRIER_LOCK_STATUS_APPLIED);
+    g_assert_cmpuint (modem_state, ==, MBIM_CARRIER_LOCK_MODEM_STATE_DEREGISTERED);
+    g_assert_cmpuint (carrier_lock_cause, ==, MBIM_CARRIER_LOCK_CAUSE_NOT_APPLICABLE);
+}
+
+static void
+test_google_carrier_lock_notification (void)
+{
+    g_autoptr(GError)         error = NULL;
+    g_autoptr(MbimMessage)    response = NULL;
+    gboolean                  result;
+    MbimCarrierLockStatus     carrier_lock_status;
+    MbimCarrierLockModemState modem_state;
+    MbimCarrierLockCause      carrier_lock_cause;
+
+    const guint8 buffer [] =  {
+        /* header */
+        0x07, 0x00, 0x00, 0x80, /* type */
+        0x38, 0x00, 0x00, 0x00, /* length */
+        0x03, 0x00, 0x00, 0x00, /* transaction id */
+        /* fragment header */
+        0x01, 0x00, 0x00, 0x00, /* total */
+        0x00, 0x00, 0x00, 0x00, /* current */
+        /* command_done message */
+        0x3E, 0x1E, 0x92, 0xCF, /* service id */
+        0xC5, 0x3D, 0x4F, 0x14,
+        0x85, 0xD0, 0xA8, 0x6A,
+        0xD9, 0xE1, 0x22, 0x45,
+        0x01, 0x00, 0x00, 0x00, /* command id */
+        0x0C, 0x00, 0x00, 0x00, /* buffer length */
+        /* information buffer */
+        0x01, 0x00, 0x00, 0x00, /* carrier lock status */
+        0x00, 0x00, 0x00, 0x00, /* modem state */
+        0x00, 0x00, 0x00, 0x00, /* carrier lock cause */
+    };
+
+    response = mbim_message_new (buffer, sizeof (buffer));
+    g_assert (mbim_message_validate (response, &error));
+    g_assert_no_error (error);
+
+    test_message_printable (response, 1, 0);
+
+    result = mbim_message_google_carrier_lock_notification_parse (
+                 response,
+                 &carrier_lock_status,
+                 &modem_state,
+                 &carrier_lock_cause,
+                 &error);
+    g_assert_no_error (error);
+    g_assert (result);
+
+    g_assert_cmpuint (carrier_lock_status, ==, MBIM_CARRIER_LOCK_STATUS_APPLIED);
+    g_assert_cmpuint (modem_state, ==, MBIM_CARRIER_LOCK_MODEM_STATE_DEREGISTERED);
+    g_assert_cmpuint (carrier_lock_cause, ==, MBIM_CARRIER_LOCK_CAUSE_NOT_APPLICABLE);
+}
+
 int main (int argc, char **argv)
 {
     g_test_init (&argc, &argv, NULL);
 
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/visible-providers", test_message_parser_basic_connect_visible_providers);
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/subscriber-ready-status", test_message_parser_basic_connect_subscriber_ready_status);
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/device-caps", test_message_parser_basic_connect_device_caps);
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/ip-configuration", test_message_parser_basic_connect_ip_configuration);
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/service-activation", test_message_parser_basic_connect_service_activation);
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/register-state", test_message_parser_basic_connect_register_state);
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/provisioned-contexts", test_message_parser_provisioned_contexts);
-    g_test_add_func ("/libmbim-glib/message/parser/sms/read/zero-pdu", test_message_parser_sms_read_zero_pdu);
-    g_test_add_func ("/libmbim-glib/message/parser/sms/read/single-pdu", test_message_parser_sms_read_single_pdu);
-    g_test_add_func ("/libmbim-glib/message/parser/sms/read/multiple-pdu", test_message_parser_sms_read_multiple_pdu);
-    g_test_add_func ("/libmbim-glib/message/parser/ussd", test_message_parser_ussd);
-    g_test_add_func ("/libmbim-glib/message/parser/auth/akap", test_message_parser_auth_akap);
-    g_test_add_func ("/libmbim-glib/message/parser/stk/pac/notification", test_message_parser_stk_pac_notification);
-    g_test_add_func ("/libmbim-glib/message/parser/stk/pac/response", test_message_parser_stk_pac_response);
-    g_test_add_func ("/libmbim-glib/message/parser/stk/terminal/response", test_message_parser_stk_terminal_response);
-    g_test_add_func ("/libmbim-glib/message/parser/stk/envelope/response", test_message_parser_stk_envelope_response);
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/ip-packet-filters/none", test_message_parser_basic_connect_ip_packet_filters_none);
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/ip-packet-filters/one", test_message_parser_basic_connect_ip_packet_filters_one);
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/ip-packet-filters/two", test_message_parser_basic_connect_ip_packet_filters_two);
-    g_test_add_func ("/libmbim-glib/message/parser/ms-firmware-id/get", test_message_parser_ms_firmware_id_get);
-    g_test_add_func ("/libmbim-glib/message/parser/basic-connect/connect/short", test_message_parser_basic_connect_connect_short);
+#define PREFIX "/libmbim-glib/message/parser"
+
+    g_test_add_func (PREFIX "/basic-connect/visible-providers", test_basic_connect_visible_providers);
+    g_test_add_func (PREFIX "/basic-connect/subscriber-ready-status", test_basic_connect_subscriber_ready_status);
+    g_test_add_func (PREFIX "/basic-connect/device-caps", test_basic_connect_device_caps);
+    g_test_add_func (PREFIX "/basic-connect/ip-configuration/1", test_basic_connect_ip_configuration);
+    g_test_add_func (PREFIX "/basic-connect/ip-configuration/2", test_basic_connect_ip_configuration_2);
+    g_test_add_func (PREFIX "/basic-connect/service-activation", test_basic_connect_service_activation);
+    g_test_add_func (PREFIX "/basic-connect/register-state", test_basic_connect_register_state);
+    g_test_add_func (PREFIX "/basic-connect/provisioned-contexts", test_provisioned_contexts);
+    g_test_add_func (PREFIX "/sms/read/zero-pdu", test_sms_read_zero_pdu);
+    g_test_add_func (PREFIX "/sms/read/single-pdu", test_sms_read_single_pdu);
+    g_test_add_func (PREFIX "/sms/read/multiple-pdu", test_sms_read_multiple_pdu);
+    g_test_add_func (PREFIX "/ussd", test_ussd);
+    g_test_add_func (PREFIX "/auth/akap", test_auth_akap);
+    g_test_add_func (PREFIX "/stk/pac/notification", test_stk_pac_notification);
+    g_test_add_func (PREFIX "/stk/pac/response", test_stk_pac_response);
+    g_test_add_func (PREFIX "/stk/terminal/response", test_stk_terminal_response);
+    g_test_add_func (PREFIX "/stk/envelope/response", test_stk_envelope_response);
+    g_test_add_func (PREFIX "/basic-connect/ip-packet-filters/none", test_basic_connect_ip_packet_filters_none);
+    g_test_add_func (PREFIX "/basic-connect/ip-packet-filters/one", test_basic_connect_ip_packet_filters_one);
+    g_test_add_func (PREFIX "/basic-connect/ip-packet-filters/two", test_basic_connect_ip_packet_filters_two);
+    g_test_add_func (PREFIX "/ms-firmware-id/get", test_ms_firmware_id_get);
+    g_test_add_func (PREFIX "/basic-connect/connect/short", test_basic_connect_connect_short);
+    g_test_add_func (PREFIX "/basic-connect/visible-providers/overflow", test_basic_connect_visible_providers_overflow);
+    g_test_add_func (PREFIX "/basic-connect-extensions/base-stations", test_ms_basic_connect_extensions_base_stations);
+    g_test_add_func (PREFIX "/basic-connect-extensions/registration-parameters/0-unnamed-tlvs", test_ms_basic_connect_extensions_registration_parameters_0_unnamed_tlvs);
+    g_test_add_func (PREFIX "/basic-connect-extensions/registration-parameters/1-unnamed-tlv", test_ms_basic_connect_extensions_registration_parameters_1_unnamed_tlv);
+    g_test_add_func (PREFIX "/basic-connect-extensions/registration-parameters/3-unnamed-tlvs", test_ms_basic_connect_extensions_registration_parameters_3_unnamed_tlvs);
+    g_test_add_func (PREFIX "/basic-connect-v3/connect/0-unnamed-tlvs", test_ms_basic_connect_v3_connect_0_unnamed_tlvs);
+    g_test_add_func (PREFIX "/basic-connect-v3/connect/0-unnamed-tlvs-empty-access-string", test_ms_basic_connect_v3_connect_0_unnamed_tlvs_empty_access_string);
+    g_test_add_func (PREFIX "/basic-connect-v3/connect/1-unnamed-tlv", test_ms_basic_connect_v3_connect_1_unnamed_tlv);
+    g_test_add_func (PREFIX "/basic-connect-v3/connect/3-unnamed-tlvs", test_ms_basic_connect_v3_connect_3_unnamed_tlvs);
+    g_test_add_func (PREFIX "/basic-connect-extensions/device-caps-v3", test_ms_basic_connect_extensions_device_caps_v3);
+    g_test_add_func (PREFIX "/basic-connect-extensions/wake-reason/command", test_ms_basic_connect_extensions_wake_reason_command);
+    g_test_add_func (PREFIX "/basic-connect-extensions/wake-reason/command/payload", test_ms_basic_connect_extensions_wake_reason_command_payload);
+    g_test_add_func (PREFIX "/basic-connect-extensions/wake-reason/packet", test_ms_basic_connect_extensions_wake_reason_packet);
+    g_test_add_func (PREFIX "/ms-uicc-low-level-access/application-list", test_ms_uicc_low_level_access_application_list);
+    g_test_add_func (PREFIX "/google/carrier-lock-response", test_google_carrier_lock);
+    g_test_add_func (PREFIX "/google/carrier-lock-notify", test_google_carrier_lock_notification);
+
+#undef PREFIX
 
     return g_test_run ();
 }

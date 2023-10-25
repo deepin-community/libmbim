@@ -6,7 +6,6 @@
 
   // *********************************************************************************
   { "name"         : "Configuration",
-    "service"      : "Phonebook",
     "type"         : "Command",
     "since"        : "1.4",
     "query"        : [],
@@ -39,13 +38,14 @@
     "since"    : "1.4",
     "contents" : [ { "name"   : "EntryIndex",
                      "format" : "guint32" },
-                   { "name"   : "Number",
-                     "format" : "string" },
-                   { "name"   : "Name",
-                     "format" : "string" } ] },
+                   { "name"          : "Number",
+                     "format"        : "string",
+                     "personal-info" : "true" },
+                   { "name"          : "Name",
+                     "format"        : "string",
+                     "personal-info" : "true" } ] },
 
   { "name"     : "Read",
-    "service"  : "Phonebook",
     "type"     : "Command",
     "since"    : "1.4",
     "query"    : [ { "name"          : "FilterFlag",
@@ -62,7 +62,6 @@
 
   // *********************************************************************************
   { "name"     : "Delete",
-    "service"  : "Phonebook",
     "type"     : "Command",
     "since"    : "1.4",
     "set"      : [ { "name"          : "FilterFlag",
@@ -75,7 +74,6 @@
 
   // *********************************************************************************
   { "name"     : "Write",
-    "service"  : "Phonebook",
     "type"     : "Command",
     "since"    : "1.4",
     "set"      : [ { "name"          : "SaveFlag",
@@ -83,10 +81,12 @@
                      "public-format" : "MbimPhonebookWriteFlag" },
                    { "name"   : "SaveIndex",
                      "format" : "guint32" },
-                   { "name"   : "Number",
-                     "format" : "string" },
-                   { "name"   : "Name",
-                     "format" : "string" } ],
+                   { "name"          : "Number",
+                     "format"        : "string",
+                     "personal-info" : "true" },
+                   { "name"          : "Name",
+                     "format"        : "string",
+                     "personal-info" : "true" } ],
     "response" : [] }
 
 ]

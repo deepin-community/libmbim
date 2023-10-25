@@ -1,22 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
  *
  * Copyright (C) 2013 - 2019 Aleksander Morgado <aleksander@aleksander.es>
  *
@@ -33,6 +18,7 @@
 #include <glib.h>
 
 #include "mbim-message.h"
+#include "mbim-tlv.h"
 
 G_BEGIN_DECLS
 
@@ -133,6 +119,13 @@ struct full_message {
 GByteArray *_mbim_message_allocate (MbimMessageType message_type, guint32 transaction_id, guint32 additional_size);
 
 /*****************************************************************************/
+/* Message validation */
+
+gboolean _mbim_message_validate_internal (const MbimMessage  *self,
+                                          gboolean            allow_fragment,
+                                          GError            **error);
+
+/*****************************************************************************/
 /* Fragment interface */
 
 gboolean      _mbim_message_is_fragment          (const MbimMessage  *self);
@@ -179,11 +172,16 @@ void               _mbim_struct_builder_append_byte_array    (MbimStructBuilder 
                                                               gboolean           with_length,
                                                               gboolean           pad_buffer,
                                                               const guint8      *buffer,
-                                                              guint32            buffer_len);
+                                                              guint32            buffer_len,
+                                                              gboolean           swapped_offset_length);
 void               _mbim_struct_builder_append_uuid          (MbimStructBuilder *builder,
                                                               const MbimUuid    *value);
+void               _mbim_struct_builder_append_guint16       (MbimStructBuilder *builder,
+                                                              guint16            value);
 void               _mbim_struct_builder_append_guint32       (MbimStructBuilder *builder,
                                                               guint32            value);
+void               _mbim_struct_builder_append_gint32        (MbimStructBuilder *builder,
+                                                              gint32             value);
 void               _mbim_struct_builder_append_guint32_array (MbimStructBuilder *builder,
                                                               const guint32     *values,
                                                               guint32            n_values);
@@ -206,6 +204,8 @@ void               _mbim_struct_builder_append_ipv6          (MbimStructBuilder 
 void               _mbim_struct_builder_append_ipv6_array    (MbimStructBuilder *builder,
                                                               const MbimIPv6    *values,
                                                               guint32            n_values);
+void               _mbim_struct_builder_append_string_tlv    (MbimStructBuilder *builder,
+                                                              const gchar       *values);
 
 /*****************************************************************************/
 /* Message builder */
@@ -225,9 +225,12 @@ void                       _mbim_message_command_builder_append_byte_array    (M
                                                                                gboolean                   with_length,
                                                                                gboolean                   pad_buffer,
                                                                                const guint8              *buffer,
-                                                                               guint32                    buffer_len);
+                                                                               guint32                    buffer_len,
+                                                                               gboolean                   swapped_offset_length);
 void                       _mbim_message_command_builder_append_uuid          (MbimMessageCommandBuilder *builder,
                                                                                const MbimUuid            *value);
+void                       _mbim_message_command_builder_append_guint16       (MbimMessageCommandBuilder *builder,
+                                                                               guint16                    value);
 void                       _mbim_message_command_builder_append_guint32       (MbimMessageCommandBuilder *builder,
                                                                                guint32                    value);
 void                       _mbim_message_command_builder_append_guint32_array (MbimMessageCommandBuilder *builder,
@@ -252,9 +255,20 @@ void                       _mbim_message_command_builder_append_ipv6          (M
 void                       _mbim_message_command_builder_append_ipv6_array    (MbimMessageCommandBuilder *builder,
                                                                                const MbimIPv6            *values,
                                                                                guint32                    n_values);
+void                       _mbim_message_command_builder_append_tlv           (MbimMessageCommandBuilder *builder,
+                                                                               const MbimTlv             *tlv);
+void                       _mbim_message_command_builder_append_tlv_string    (MbimMessageCommandBuilder *builder,
+                                                                               const gchar               *str);
+void                       _mbim_message_command_builder_append_tlv_list      (MbimMessageCommandBuilder *builder,
+                                                                               const GList               *tlvs);
 
 /*****************************************************************************/
 /* Message parser */
+
+typedef enum {
+    MBIM_STRING_ENCODING_UTF16,
+    MBIM_STRING_ENCODING_UTF8,
+} MbimStringEncoding;
 
 gboolean _mbim_message_read_byte_array    (const MbimMessage  *self,
                                            guint32             struct_start_offset,
@@ -264,14 +278,24 @@ gboolean _mbim_message_read_byte_array    (const MbimMessage  *self,
                                            guint32             explicit_array_size,
                                            const guint8      **array,
                                            guint32            *array_size,
-                                           GError            **error);
+                                           GError            **error,
+                                           gboolean            swapped_offset_length);
 gboolean _mbim_message_read_uuid          (const MbimMessage  *self,
                                            guint32             relative_offset,
-                                           const MbimUuid    **uuid,
+                                           const MbimUuid    **uuid_ptr, /* unsafe if unaligned */
+                                           MbimUuid           *uuid_value,
+                                           GError            **error);
+gboolean _mbim_message_read_guint16      (const MbimMessage  *self,
+                                           guint32             relative_offset,
+                                           guint16            *value,
                                            GError            **error);
 gboolean _mbim_message_read_guint32       (const MbimMessage  *self,
                                            guint32             relative_offset,
                                            guint32            *value,
+                                           GError            **error);
+gboolean _mbim_message_read_gint32        (const MbimMessage  *self,
+                                           guint32             relative_offset,
+                                           gint32             *value,
                                            GError            **error);
 gboolean _mbim_message_read_guint32_array (const MbimMessage  *self,
                                            guint32             array_size,
@@ -279,24 +303,28 @@ gboolean _mbim_message_read_guint32_array (const MbimMessage  *self,
                                            guint32           **array,
                                            GError            **error);
 gboolean _mbim_message_read_guint64       (const MbimMessage  *self,
-                                           guint64             relative_offset,
+                                           guint32             relative_offset,
                                            guint64            *value,
                                            GError            **error);
 gboolean _mbim_message_read_string        (const MbimMessage  *self,
                                            guint32             struct_start_offset,
                                            guint32             relative_offset,
+                                           MbimStringEncoding  encoding,
                                            gchar             **str,
+                                           guint32            *bytes_read,
                                            GError            **error);
 gboolean _mbim_message_read_string_array  (const MbimMessage   *self,
                                            guint32              array_size,
                                            guint32              struct_start_offset,
                                            guint32              relative_offset_array_start,
+                                           MbimStringEncoding   encoding,
                                            gchar             ***array,
                                            GError             **error);
 gboolean _mbim_message_read_ipv4          (const MbimMessage  *self,
                                            guint32             relative_offset,
                                            gboolean            ref,
-                                           const MbimIPv4    **ipv4,
+                                           const MbimIPv4    **ipv4_ptr,  /* unsafe if unaligned */
+                                           MbimIPv4           *ipv4_value,
                                            GError            **error);
 gboolean _mbim_message_read_ipv4_array    (const MbimMessage  *self,
                                            guint32             array_size,
@@ -306,13 +334,36 @@ gboolean _mbim_message_read_ipv4_array    (const MbimMessage  *self,
 gboolean _mbim_message_read_ipv6          (const MbimMessage  *self,
                                            guint32             relative_offset,
                                            gboolean            ref,
-                                           const MbimIPv6    **ipv6,
+                                           const MbimIPv6    **ipv6_ptr,  /* unsafe if unaligned */
+                                           MbimIPv6           *ipv6_value,
                                            GError            **error);
 gboolean _mbim_message_read_ipv6_array    (const MbimMessage  *self,
                                            guint32             array_size,
                                            guint32             relative_offset_array_start,
                                            MbimIPv6          **array,
                                            GError            **error);
+
+gboolean _mbim_message_read_tlv               (const MbimMessage  *self,
+                                               guint32             relative_offset,
+                                               MbimTlv           **tlv,
+                                               guint32            *bytes_read,
+                                               GError            **error);
+gboolean _mbim_message_read_tlv_string        (const MbimMessage  *self,
+                                               guint32             relative_offset,
+                                               gchar             **str,
+                                               guint32            *bytes_read,
+                                               GError            **error);
+gboolean _mbim_message_read_tlv_guint16_array (const MbimMessage  *self,
+                                               guint32             relative_offset,
+                                               guint32            *array_size,
+                                               guint16           **array,
+                                               guint32            *bytes_read,
+                                               GError            **error);
+gboolean _mbim_message_read_tlv_list          (const MbimMessage  *self,
+                                               guint32             relative_offset,
+                                               GList             **tlv,
+                                               guint32            *bytes_read,
+                                               GError            **error);
 
 G_END_DECLS
 

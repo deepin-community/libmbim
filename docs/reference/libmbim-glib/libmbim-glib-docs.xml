@@ -8,7 +8,10 @@
 <book id="libmbim-glib">
   <bookinfo>
     <title>libmbim-glib Reference Manual</title>
-    <releaseinfo>for libmbim-glib &version;</releaseinfo>
+    <releaseinfo>
+      For libmbim-glib &version;. The latest version of this documentation can be found on-line at
+     <ulink role="online-location" url="https://www.freedesktop.org/software/libmbim/libmbim-glib/latest/">https://www.freedesktop.org/software/libmbim/libmbim-glib/latest/</ulink>.
+    </releaseinfo>
 
     <copyright>
       <year>2013</year>
@@ -19,6 +22,9 @@
       <year>2018</year>
       <year>2019</year>
       <year>2020</year>
+      <year>2021</year>
+      <year>2022</year>
+      <year>2023</year>
       <holder>The libmbim-glib authors</holder>
     </copyright>
 
@@ -55,6 +61,7 @@
     <xi:include href="xml/mbim-enums.xml"/>
     <xi:include href="xml/mbim-errors.xml"/>
     <xi:include href="xml/mbim-utils.xml"/>
+    <xi:include href="xml/mbim-tlv.xml"/>
   </chapter>
 
   <chapter>
@@ -70,14 +77,22 @@
 
   <chapter>
     <title>Microsoft-defined services</title>
+    <xi:include href="xml/mbim-ms-basic-connect-v2.xml"/>
+    <xi:include href="xml/mbim-ms-basic-connect-v3.xml"/>
     <xi:include href="xml/mbim-ms-basic-connect-extensions.xml"/>
+    <xi:include href="xml/mbim-ms-basic-connect-extensions-v2.xml"/>
+    <xi:include href="xml/mbim-ms-basic-connect-extensions-v3.xml"/>
+    <xi:include href="xml/mbim-ms-uicc-low-level-access.xml"/>
     <xi:include href="xml/mbim-ms-firmware-id.xml"/>
     <xi:include href="xml/mbim-ms-host-shutdown.xml"/>
+    <xi:include href="xml/mbim-ms-sar.xml"/>
+    <xi:include href="xml/mbim-ms-voice-extensions.xml"/>
   </chapter>
 
   <chapter>
     <title>Qualcomm-defined services</title>
     <xi:include href="xml/mbim-qmi.xml"/>
+    <xi:include href="xml/mbim-qdu.xml"/>
   </chapter>
 
   <chapter>
@@ -88,6 +103,25 @@
   <chapter>
     <title>Intel-defined Services</title>
     <xi:include href="xml/mbim-intel-firmware-update.xml"/>
+    <xi:include href="xml/mbim-intel-firmware-update-v2.xml"/>
+    <xi:include href="xml/mbim-intel-thermal-rf.xml"/>
+    <xi:include href="xml/mbim-intel-mutual-authentication.xml"/>
+    <xi:include href="xml/mbim-intel-tools.xml"/>
+  </chapter>
+
+  <chapter>
+    <title>Quectel-defined Services</title>
+    <xi:include href="xml/mbim-quectel.xml"/>
+  </chapter>
+
+  <chapter>
+    <title>Google-defined Services</title>
+    <xi:include href="xml/mbim-google.xml"/>
+  </chapter>
+
+  <chapter>
+    <title>libmbim-defined Services</title>
+    <xi:include href="xml/mbim-proxy-control.xml"/>
   </chapter>
 
   <chapter>
@@ -150,6 +184,22 @@
   <chapter id="api-index-1-24-4" role="1.24.4">
     <title>Index of new symbols in 1.24.4</title>
     <xi:include href="xml/api-index-1.24.4.xml"></xi:include>
+  </chapter>
+  <chapter id="api-index-1-26" role="1.26">
+    <title>Index of new symbols in 1.26</title>
+    <xi:include href="xml/api-index-1.26.xml"></xi:include>
+  </chapter>
+  <chapter id="api-index-1-26-2" role="1.26.2">
+    <title>Index of new symbols in 1.26.2</title>
+    <xi:include href="xml/api-index-1.26.2.xml"></xi:include>
+  </chapter>
+  <chapter id="api-index-1-28" role="1.28">
+    <title>Index of new symbols in 1.28</title>
+    <xi:include href="xml/api-index-1.28.xml"></xi:include>
+  </chapter>
+  <chapter id="api-index-1-30" role="1.30">
+    <title>Index of new symbols in 1.30</title>
+    <xi:include href="xml/api-index-1.30.xml"></xi:include>
   </chapter>
 
   <xi:include href="xml/annotation-glossary.xml"><xi:fallback /></xi:include>

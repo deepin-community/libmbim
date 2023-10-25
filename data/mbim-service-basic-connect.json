@@ -6,7 +6,6 @@
 
   // *********************************************************************************
   { "name"     : "Device Caps",
-    "service"  : "Basic Connect",
     "type"     : "Command",
     "since"    : "1.0",
     "query"    : [],
@@ -22,9 +21,9 @@
                    { "name"          : "SimClass",
                      "format"        : "guint32",
                      "public-format" : "MbimSimClass" },
-                  { "name"          : "DataClass",
-                    "format"        : "guint32",
-                    "public-format" : "MbimDataClass" },
+                   { "name"          : "DataClass",
+                     "format"        : "guint32",
+                     "public-format" : "MbimDataClass" },
                    { "name"          : "SmsCaps",
                      "format"        : "guint32",
                      "public-format" : "MbimSmsCaps" },
@@ -36,9 +35,10 @@
                    { "name"     : "CustomDataClass",
                      "format"   : "string",
                      "max-size" : "22" },
-                   { "name"     : "DeviceId",
-                     "format"   : "string",
-                     "max-size" : "36" },
+                   { "name"          : "DeviceId",
+                     "format"        : "string",
+                     "max-size"      : "36",
+                     "personal-info" : "true" },
                    { "name"     : "FirmwareInfo",
                      "format"   : "string",
                      "max-size" : "60" },
@@ -48,7 +48,6 @@
 
   // *********************************************************************************
   { "name"         : "Subscriber Ready Status",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since-ex"     : { "query"        : "1.0",
                        "response"     : "1.0",
@@ -57,10 +56,12 @@
     "response"     : [ { "name"          : "ReadyState",
                          "format"        : "guint32",
                          "public-format" : "MbimSubscriberReadyState" },
-                       { "name"   : "SubscriberId",
-                         "format" : "string" },
-                       { "name"   : "SimIccId",
-                         "format" : "string" },
+                       { "name"          : "SubscriberId",
+                         "format"        : "string",
+                         "personal-info" : "true" },
+                       { "name"          : "SimIccId",
+                         "format"        : "string",
+                         "personal-info" : "true" },
                        { "name"          : "ReadyInfo",
                          "format"        : "guint32",
                          "public-format" : "MbimReadyInfoFlag" },
@@ -68,14 +69,17 @@
                          "format" : "guint32" },
                        { "name"             : "TelephoneNumbers",
                          "format"           : "string-array",
-                         "array-size-field" : "TelephoneNumbersCount" } ],
+                         "array-size-field" : "TelephoneNumbersCount",
+                         "personal-info"    : "true" } ],
     "notification" : [ { "name"          : "ReadyState",
                          "format"        : "guint32",
                          "public-format" : "MbimSubscriberReadyState" },
-                       { "name"   : "SubscriberId",
-                         "format" : "string" },
-                       { "name"   : "SimIccId",
-                         "format" : "string" },
+                       { "name"          : "SubscriberId",
+                         "format"        : "string",
+                         "personal-info" : "true" },
+                       { "name"          : "SimIccId",
+                         "format"        : "string",
+                         "personal-info" : "true" },
                        { "name"          : "ReadyInfo",
                          "format"        : "guint32",
                          "public-format" : "MbimReadyInfoFlag" },
@@ -83,11 +87,11 @@
                          "format" : "guint32" },
                        { "name"             : "TelephoneNumbers",
                          "format"           : "string-array",
-                         "array-size-field" : "TelephoneNumbersCount" } ] },
+                         "array-size-field" : "TelephoneNumbersCount",
+                         "personal-info"    : "true"} ] },
 
   // *********************************************************************************
   { "name"         : "Radio State",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since"        : "1.0",
     "set"          : [ { "name"          : "RadioState",
@@ -109,7 +113,6 @@
 
   // *********************************************************************************
   { "name"     : "Pin",
-    "service"  : "Basic Connect",
     "type"     : "Command",
     "since"    : "1.0",
     "set"      : [ { "name"          : "PinType",
@@ -148,7 +151,6 @@
                      "format" : "guint32" } ] },
 
   { "name"     : "Pin List",
-    "service"  : "Basic Connect",
     "type"     : "Command",
     "since"    : "1.0",
     "query"    : [],
@@ -203,7 +205,6 @@
                      "format" : "guint32" } ] },
 
   { "name"     : "Home Provider",
-    "service"  : "Basic Connect",
     "type"     : "Command",
     "since"    : "1.2",
     "set"      : [ { "name"        : "Provider",
@@ -216,7 +217,6 @@
 
   // *********************************************************************************
   { "name"         : "Preferred Providers",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since-ex"     : { "set"          : "1.2",
                        "query"        : "1.2",
@@ -244,7 +244,6 @@
 
   // *********************************************************************************
   { "name"       : "Visible Providers",
-    "service"    : "Basic Connect",
     "type"       : "Command",
     "since"      : "1.2",
     "query"      : [ { "name" : "Action",
@@ -259,7 +258,6 @@
 
   // *********************************************************************************
   { "name"         : "Register State",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since"        : "1.0",
     "set"          : [ { "name"   : "ProviderId",
@@ -322,7 +320,6 @@
 
   // *********************************************************************************
   { "name"         : "Signal State",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since"        : "1.0",
     "set"          : [ { "name"   : "SignalStrengthInterval",
@@ -356,7 +353,6 @@
 
   // *********************************************************************************
   { "name"         : "Packet Service",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since"        : "1.0",
     "set"          : [ { "name"          : "PacketServiceAction",
@@ -390,7 +386,6 @@
 
   // *********************************************************************************
   { "name"         : "Connect",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since"        : "1.0",
     "set"          : [ { "name"   : "SessionId",
@@ -400,10 +395,12 @@
                          "public-format" : "MbimActivationCommand" },
                        { "name"   : "AccessString",
                          "format" : "string" },
-                       { "name"   : "UserName",
-                         "format" : "string" },
-                       { "name"   : "Password",
-                         "format" : "string" },
+                       { "name"          : "UserName",
+                         "format"        : "string",
+                         "personal-info" : "true" },
+                       { "name"          : "Password",
+                         "format"        : "string",
+                         "personal-info" : "true" },
                        { "name"          : "Compression",
                          "format"        : "guint32",
                          "public-format" : "MbimCompression" },
@@ -471,10 +468,12 @@
                      "format" : "uuid" },
                    { "name"   : "AccessString",
                      "format" : "string" },
-                   { "name"   : "UserName",
-                     "format" : "string" },
-                   { "name"   : "Password",
-                     "format" : "string" },
+                   { "name"          : "UserName",
+                     "format"        : "string",
+                     "personal-info" : "true" },
+                   { "name"          : "Password",
+                     "format"        : "string",
+                     "personal-info" : "true" },
                    { "name"          : "Compression",
                      "format"        : "guint32",
                      "public-format" : "MbimCompression" },
@@ -483,7 +482,6 @@
                      "public-format" : "MbimAuthProtocol" } ] },
 
   { "name"         : "Provisioned Contexts",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since"        : "1.0",
     "set"          : [ { "name"   : "ContextId",
@@ -492,10 +490,12 @@
                          "format" : "uuid" },
                        { "name"   : "AccessString",
                          "format" : "string" },
-                       { "name"   : "UserName",
-                         "format" : "string" },
-                       { "name"   : "Password",
-                         "format" : "string" },
+                       { "name"          : "UserName",
+                         "format"        : "string",
+                         "personal-info" : "true" },
+                       { "name"          : "Password",
+                         "format"        : "string",
+                         "personal-info" : "true" },
                        { "name"          : "Compression",
                          "format"        : "guint32",
                          "public-format" : "MbimCompression" },
@@ -521,7 +521,6 @@
   // *********************************************************************************
 
   { "name"     : "Service Activation",
-    "service"  : "Basic Connect",
     "type"     : "Command",
     "since"    : "1.2",
     "set"      : [ { "name"   : "Buffer",
@@ -550,7 +549,6 @@
                      "format" : "ipv6" } ] },
 
   { "name"         : "IP Configuration",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since"        : "1.0",
     "query"        : [ { "name"   : "SessionId",
@@ -685,7 +683,6 @@
                      "array-size-field" : "CidsCount" } ] },
 
   { "name"     : "Device Services",
-    "service"  : "Basic Connect",
     "type"     : "Command",
     "since"    : "1.0",
     "query"    : [],
@@ -711,7 +708,6 @@
                      "array-size-field" : "CidsCount" } ] },
 
   { "name"     : "Device Service Subscribe List",
-    "service"  : "Basic Connect",
     "type"     : "Command",
     "since"    : "1.8",
     "set"      : [ { "name"   : "EventsCount",
@@ -729,7 +725,6 @@
 
   // *********************************************************************************
   { "name"     : "Packet Statistics",
-    "service"  : "Basic Connect",
     "type"     : "Command",
     "since"    : "1.4",
     "query"    : [],
@@ -752,7 +747,6 @@
 
   // *********************************************************************************
   { "name"     : "Network Idle Hint",
-    "service"  : "Basic Connect",
     "type"     : "Command",
     "since"    : "1.4",
     "query"    : [],
@@ -765,7 +759,6 @@
 
   // *********************************************************************************
   { "name"         : "Emergency Mode",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since-ex"     : { "set"          : "1.4",
                        "query"        : "1.4",
@@ -796,7 +789,6 @@
                      "array-size-field" : "FilterSize" } ] },
 
   { "name"     : "IP Packet Filters",
-    "service"  : "Basic Connect",
     "type"     : "Command",
     "since"    : "1.4",
     "query"    : [ { "name"   : "SessionId",
@@ -826,7 +818,6 @@
 
   // *********************************************************************************
   { "name"         : "Multicarrier Providers",
-    "service"      : "Basic Connect",
     "type"         : "Command",
     "since-ex"     : { "set"          : "1.4",
                        "query"        : "1.4",

@@ -1,23 +1,10 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * libmbim-glib -- GLib/GIO based library to control MBIM devices
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA.
- *
  * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright (C) 2022 Intel Corporation
  */
 
 #ifndef _LIBMBIM_GLIB_MBIM_ERRORS_H_
@@ -51,20 +38,22 @@
  * @MBIM_CORE_ERROR_UNSUPPORTED: Not supported.
  * @MBIM_CORE_ERROR_ABORTED: Operation aborted.
  * @MBIM_CORE_ERROR_UNKNOWN_STATE: State is unknown. Since 1.16.
+ * @MBIM_CORE_ERROR_INCOMPLETE_MESSAGE: MBIM message is incomplete. Since 1.28.
  *
  * Common errors that may be reported by libmbim-glib.
  *
  * Since: 1.0
  */
 typedef enum { /*< since=1.0 >*/
-    MBIM_CORE_ERROR_FAILED           = 0, /*< nick=Failed >*/
-    MBIM_CORE_ERROR_WRONG_STATE      = 1, /*< nick=WrongState >*/
-    MBIM_CORE_ERROR_TIMEOUT          = 2, /*< nick=Timeout >*/
-    MBIM_CORE_ERROR_INVALID_ARGS     = 3, /*< nick=InvalidArgs >*/
-    MBIM_CORE_ERROR_INVALID_MESSAGE  = 4, /*< nick=InvalidMessage >*/
-    MBIM_CORE_ERROR_UNSUPPORTED      = 5, /*< nick=Unsupported >*/
-    MBIM_CORE_ERROR_ABORTED          = 6, /*< nick=Aborted >*/
-    MBIM_CORE_ERROR_UNKNOWN_STATE    = 7  /*< nick=UnknownState >*/
+    MBIM_CORE_ERROR_FAILED             = 0, /*< nick=Failed >*/
+    MBIM_CORE_ERROR_WRONG_STATE        = 1, /*< nick=WrongState >*/
+    MBIM_CORE_ERROR_TIMEOUT            = 2, /*< nick=Timeout >*/
+    MBIM_CORE_ERROR_INVALID_ARGS       = 3, /*< nick=InvalidArgs >*/
+    MBIM_CORE_ERROR_INVALID_MESSAGE    = 4, /*< nick=InvalidMessage >*/
+    MBIM_CORE_ERROR_UNSUPPORTED        = 5, /*< nick=Unsupported >*/
+    MBIM_CORE_ERROR_ABORTED            = 6, /*< nick=Aborted >*/
+    MBIM_CORE_ERROR_UNKNOWN_STATE      = 7, /*< nick=UnknownState >*/
+    MBIM_CORE_ERROR_INCOMPLETE_MESSAGE = 8, /*< nick=IncompleteMessage >*/
 } MbimCoreError;
 
 /**
@@ -141,6 +130,13 @@ typedef enum { /*< since=1.0 >*/
  * @MBIM_STATUS_ERROR_SMS_LANG_NOT_SUPPORTED: Language not supported in SMS.
  * @MBIM_STATUS_ERROR_SMS_ENCODING_NOT_SUPPORTED: Encoding not supported in SMS.
  * @MBIM_STATUS_ERROR_SMS_FORMAT_NOT_SUPPORTED: Format not supported in SMS.
+ * @MBIM_STATUS_ERROR_INVALID_SIGNATURE: Invalid signature. Defined by Google for the carrier lock operation. Since 1.30.
+ * @MBIM_STATUS_ERROR_INVALID_IMEI: Invalid IMEI. Defined by Google for the carrier lock operation. Since 1.30.
+ * @MBIM_STATUS_ERROR_INVALID_TIMESTAMP: Invalid timestamp. Defined by Google for the carrier lock operation. Since 1.30.
+ * @MBIM_STATUS_ERROR_NETWORK_LIST_TOO_LARGE: List of networks too large. Defined by Google for the carrier lock operation. Since 1.30.
+ * @MBIM_STATUS_ERROR_SIGNATURE_ALGORITHM_NOT_SUPPORTED: Signature algorithm not supported. Defined by Google for the carrier lock operation. Since 1.30.
+ * @MBIM_STATUS_ERROR_FEATURE_NOT_SUPPORTED: Feature not supported. Defined by Google for the carrier lock operation. Since 1.30.
+ * @MBIM_STATUS_ERROR_DECODE_OR_PARSING_ERROR: Decode or parsing error. Defined by Google for the carrier lock operation. Since 1.30.
  *
  * Status of the MBIM request.
  *
@@ -190,7 +186,15 @@ typedef enum { /*< since=1.0 >*/
     MBIM_STATUS_ERROR_SMS_NETWORK_TIMEOUT              = 101, /*< nick=SmsNetworkTimeout >*/
     MBIM_STATUS_ERROR_SMS_LANG_NOT_SUPPORTED           = 102, /*< nick=SmsLangNotSupported >*/
     MBIM_STATUS_ERROR_SMS_ENCODING_NOT_SUPPORTED       = 103, /*< nick=SmsEncodingNotSupported >*/
-    MBIM_STATUS_ERROR_SMS_FORMAT_NOT_SUPPORTED         = 104  /*< nick=SmsFormatNotSupported >*/
+    MBIM_STATUS_ERROR_SMS_FORMAT_NOT_SUPPORTED         = 104, /*< nick=SmsFormatNotSupported >*/
+    /* google defined error for carrier lock */
+    MBIM_STATUS_ERROR_INVALID_SIGNATURE                 = 0x91000001, /*< nick=InvalidSignature >*/
+    MBIM_STATUS_ERROR_INVALID_IMEI                      = 0x91000002, /*< nick=InvalidImei >*/
+    MBIM_STATUS_ERROR_INVALID_TIMESTAMP                 = 0x91000003, /*< nick=InvalidTimeStamp >*/
+    MBIM_STATUS_ERROR_NETWORK_LIST_TOO_LARGE            = 0x91000004, /*< nick=NetworkListTooLarge >*/
+    MBIM_STATUS_ERROR_SIGNATURE_ALGORITHM_NOT_SUPPORTED = 0x91000005, /*< nick=SignatureAlgorithmNotSupported >*/
+    MBIM_STATUS_ERROR_FEATURE_NOT_SUPPORTED             = 0x91000006, /*< nick=FeatureNotSupported >*/
+    MBIM_STATUS_ERROR_DECODE_OR_PARSING_ERROR           = 0x91000007, /*< nick=DecodeOrParsingError >*/
 } MbimStatusError;
 
 #endif /* _LIBMBIM_GLIB_MBIM_ERRORS_H_ */

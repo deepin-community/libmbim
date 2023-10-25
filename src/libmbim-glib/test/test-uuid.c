@@ -1,15 +1,6 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details:
- *
  * Copyright (C) 2013 - 2014 Aleksander Morgado <aleksander@aleksander.es>
  */
 
@@ -92,6 +83,13 @@ test_uuid_ms_host_shutdown (void)
 }
 
 static void
+test_uuid_ms_sar (void)
+{
+    compare_uuid_strings (MBIM_UUID_MS_SAR,
+                          "68223d04-9f6c-4e0f-822d-28441fb72340");
+}
+
+static void
 test_uuid_intel_firmware_update (void)
 {
     compare_uuid_strings (MBIM_UUID_INTEL_FIRMWARE_UPDATE,
@@ -103,6 +101,13 @@ test_uuid_ms_basic_connect_extensions (void)
 {
     compare_uuid_strings (MBIM_UUID_MS_BASIC_CONNECT_EXTENSIONS,
                           "3d01dcc5-fef5-4d05-0d3a-bef7058e9aaf");
+}
+
+static void
+test_uuid_quectel (void)
+{
+    compare_uuid_strings (MBIM_UUID_QUECTEL,
+                          "11223344-5566-7788-99aa-bbccddeeff11");
 }
 
 /*****************************************************************************/
@@ -214,8 +219,10 @@ int main (int argc, char **argv)
     g_test_add_func ("/libmbim-glib/uuid/dss",                         test_uuid_dss);
     g_test_add_func ("/libmbim-glib/uuid/ms-firmware-id",              test_uuid_ms_firmware_id);
     g_test_add_func ("/libmbim-glib/uuid/ms-host-shutdown",            test_uuid_ms_host_shutdown);
+    g_test_add_func ("/libmbim-glib/uuid/ms-sar",                      test_uuid_ms_sar);
     g_test_add_func ("/libmbim-glib/uuid/intel-firmware-update",       test_uuid_intel_firmware_update);
     g_test_add_func ("/libmbim-glib/uuid/ms-basic-connect-extensions", test_uuid_ms_basic_connect_extensions);
+    g_test_add_func ("/libmbim-glib/uuid/quectel",                     test_uuid_quectel);
 
     g_test_add_func ("/libmbim-glib/uuid/valid",           test_uuid_valid);
     g_test_add_func ("/libmbim-glib/uuid/valid/camelcase", test_uuid_valid_camelcase);
