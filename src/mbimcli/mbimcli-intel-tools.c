@@ -179,6 +179,7 @@ mbimcli_intel_tools_run (MbimDevice   *device,
                          GCancellable *cancellable)
 {
     g_autoptr(MbimMessage) request = NULL;
+    g_autoptr(GError)      error   = NULL;
 
     /* Initialize context */
     ctx = g_slice_new (Context);
@@ -203,18 +204,16 @@ mbimcli_intel_tools_run (MbimDevice   *device,
             return;
         }
 
-        if (split[0]) {
-            if (!mbimcli_read_trace_command_from_string (split[0], &trace_command)) {
-                g_printerr ("error: couldn't parse input string, invalid trace command '%s'\n", split[0]);
-                return;
-            }
+        g_return_if_fail (split[0] && split[1]);
+
+        if (!mbimcli_read_trace_command_from_string (split[0], &trace_command, &error)) {
+            g_printerr ("error: couldn't parse input string: %s\n", error->message);
+            return;
         }
 
-        if (split[1]) {
-            if (!mbimcli_read_uint_from_string (split[1], &trace_value)) {
-                g_printerr ("error: couldn't parse input string, invalid trace value '%s'\n", split[1]);
-                return;
-            }
+        if (!mbimcli_read_uint_from_string (split[1], &trace_value)) {
+            g_printerr ("error: couldn't parse input string, invalid trace value '%s'\n", split[1]);
+            return;
         }
 
         g_debug ("Asynchronously setting trace info...");
@@ -232,8 +231,8 @@ mbimcli_intel_tools_run (MbimDevice   *device,
     if (query_trace_config_str) {
         MbimTraceCommand trace_command;
 
-        if (!mbimcli_read_trace_command_from_string (query_trace_config_str, &trace_command)) {
-            g_printerr ("error: couldn't parse input string, invalid trace command '%d'\n", trace_command);
+        if (!mbimcli_read_trace_command_from_string (query_trace_config_str, &trace_command, &error)) {
+            g_printerr ("error: couldn't parse input string: %s\n", error->message);
             return;
         }
 

@@ -172,11 +172,14 @@ static const CidConfig cid_ms_basic_connect_extensions_config [MBIM_CID_MS_BASIC
 };
 
 /* Note: index of the array is CID-1 */
-#define MBIM_CID_QDU_LAST MBIM_CID_QDU_FILE_WRITE
+#define MBIM_CID_QDU_LAST MBIM_CID_QDU_COMMAND
 static const CidConfig cid_qdu_config [MBIM_CID_QDU_LAST] = {
     { SET,    QUERY,    NOTIFY    }, /* MBIM_CID_QDU_UPDATE_SESSION */
     { SET,    NO_QUERY, NO_NOTIFY }, /* MBIM_CID_QDU_FILE_OPEN */
     { SET,    NO_QUERY, NO_NOTIFY }, /* MBIM_CID_QDU_FILE_WRITE */
+    { SET,    NO_QUERY, NO_NOTIFY }, /* MBIM_CID_QDU_QUECTEL_REBOOT */
+    { SET,    NO_QUERY, NO_NOTIFY }, /* MBIM_CID_QDU_QUECTEL_READ_VERSION */
+    { SET,    NO_QUERY, NO_NOTIFY }, /* MBIM_CID_QDU_COMMAND */
 };
 
 /* Note: index of the array is CID-1 */
@@ -254,7 +257,17 @@ static const CidConfig cid_google_config [MBIM_CID_GOOGLE_LAST] = {
     { SET, QUERY, NOTIFY }, /* MBIM_CID_GOOGLE_CARRIER_LOCK */
 };
 
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_FIBOCOM_LAST MBIM_CID_FIBOCOM_AT_COMMAND
+static const CidConfig cid_fibocom_config [MBIM_CID_FIBOCOM_LAST] = {
+    { SET, NO_QUERY, NO_NOTIFY }, /* MBIM_CID_FIBOCOM_AT_COMMAND */
+};
 
+/* Note: index of the array is CID-1 */
+#define MBIM_CID_COMPAL_LAST MBIM_CID_COMPAL_AT_COMMAND
+static const CidConfig cid_compal_config [MBIM_CID_COMPAL_LAST] = {
+    { NO_SET, QUERY, NO_NOTIFY } /* MBIM_CID_COMPAL_AT_COMMAND */
+};
 gboolean
 mbim_cid_can_set (MbimService service,
                   guint       cid)
@@ -312,6 +325,10 @@ mbim_cid_can_set (MbimService service,
         return cid_intel_tools_config[cid - 1].set;
     case MBIM_SERVICE_GOOGLE:
         return cid_google_config[cid - 1].set;
+    case MBIM_SERVICE_FIBOCOM:
+        return cid_fibocom_config[cid - 1].set;
+    case MBIM_SERVICE_COMPAL:
+        return cid_compal_config[cid - 1].set;
     case MBIM_SERVICE_INVALID:
     case MBIM_SERVICE_LAST:
     default:
@@ -377,6 +394,10 @@ mbim_cid_can_query (MbimService service,
         return cid_intel_tools_config[cid - 1].query;
     case MBIM_SERVICE_GOOGLE:
         return cid_google_config[cid - 1].query;
+    case MBIM_SERVICE_FIBOCOM:
+        return cid_fibocom_config[cid - 1].query;
+    case MBIM_SERVICE_COMPAL:
+        return cid_compal_config[cid - 1].query;
     case MBIM_SERVICE_INVALID:
     case MBIM_SERVICE_LAST:
     default:
@@ -442,6 +463,10 @@ mbim_cid_can_notify (MbimService service,
         return cid_intel_tools_config[cid - 1].notify;
     case MBIM_SERVICE_GOOGLE:
         return cid_google_config[cid - 1].notify;
+    case MBIM_SERVICE_FIBOCOM:
+        return cid_fibocom_config[cid - 1].notify;
+    case MBIM_SERVICE_COMPAL:
+        return cid_compal_config[cid - 1].notify;
     case MBIM_SERVICE_INVALID:
     case MBIM_SERVICE_LAST:
     default:
@@ -508,6 +533,11 @@ mbim_cid_get_printable (MbimService service,
         return mbim_cid_intel_tools_get_string (cid);
     case MBIM_SERVICE_GOOGLE:
         return mbim_cid_google_get_string (cid);
+    case MBIM_SERVICE_FIBOCOM:
+        return mbim_cid_fibocom_get_string (cid);
+    case MBIM_SERVICE_COMPAL:
+        return mbim_cid_compal_get_string (cid);
+
     case MBIM_SERVICE_LAST:
     default:
         g_assert_not_reached ();

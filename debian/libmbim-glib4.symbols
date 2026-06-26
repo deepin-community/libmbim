@@ -41,8 +41,12 @@ libmbim-glib.so.4 libmbim-glib4 #MINVER#, libmbim-proxy
  mbim_cid_can_notify@Base 1.10.0
  mbim_cid_can_query@Base 1.10.0
  mbim_cid_can_set@Base 1.10.0
+ mbim_cid_compal_get_string@Base 1.31.6
+ mbim_cid_compal_get_type@Base 1.31.6
  mbim_cid_dss_get_string@Base 1.10.0
  mbim_cid_dss_get_type@Base 1.10.0
+ mbim_cid_fibocom_get_string@Base 1.31.6
+ mbim_cid_fibocom_get_type@Base 1.31.6
  mbim_cid_get_printable@Base 1.10.0
  mbim_cid_google_get_string@Base 1.30.0
  mbim_cid_google_get_type@Base 1.30.0
@@ -210,6 +214,8 @@ libmbim-glib.so.4 libmbim-glib4 #MINVER#, libmbim-proxy
  mbim_message_command_new@Base 1.10.0
  mbim_message_command_type_get_string@Base 1.10.0
  mbim_message_command_type_get_type@Base 1.10.0
+ mbim_message_compal_at_command_query_new@Base 1.31.6
+ mbim_message_compal_at_command_response_parse@Base 1.31.6
  mbim_message_connect_notification_parse@Base 1.10.0
  mbim_message_connect_query_new@Base 1.10.0
  mbim_message_connect_response_parse@Base 1.10.0
@@ -232,6 +238,8 @@ libmbim-glib.so.4 libmbim-glib4 #MINVER#, libmbim-proxy
  mbim_message_error_get_error@Base 1.10.0
  mbim_message_error_get_error_status_code@Base 1.10.0
  mbim_message_error_new@Base 1.10.0
+ mbim_message_fibocom_at_command_response_parse@Base 1.31.6
+ mbim_message_fibocom_at_command_set_new@Base 1.31.6
  mbim_message_function_error_new@Base 1.12.2
  mbim_message_get_message_length@Base 1.10.0
  mbim_message_get_message_type@Base 1.10.0
@@ -414,6 +422,8 @@ libmbim-glib.so.4 libmbim-glib4 #MINVER#, libmbim-proxy
  mbim_message_proxy_control_configuration_response_parse@Base 1.10.0
  mbim_message_proxy_control_configuration_set_new@Base 1.10.0
  mbim_message_proxy_control_version_notification_parse@Base 1.28.0
+ mbim_message_qdu_command_response_parse@Base 1.31.6
+ mbim_message_qdu_command_set_new@Base 1.31.6
  mbim_message_qdu_file_open_query_new@Base 1.26.0
  mbim_message_qdu_file_open_response_parse@Base 1.26.0
  mbim_message_qdu_file_open_set_new@Base 1.26.0
@@ -564,6 +574,10 @@ libmbim-glib.so.4 libmbim-glib4 #MINVER#, libmbim-proxy
  mbim_qdu_session_status_get_type@Base 1.26.0
  mbim_qdu_session_type_get_string@Base 1.26.0
  mbim_qdu_session_type_get_type@Base 1.26.0
+ mbim_quectel_command_response_status_get_string@Base 1.31.6
+ mbim_quectel_command_response_status_get_type@Base 1.31.6
+ mbim_quectel_command_type_get_string@Base 1.31.6
+ mbim_quectel_command_type_get_type@Base 1.31.6
  mbim_quectel_radio_switch_state_get_string@Base 1.26.2
  mbim_quectel_radio_switch_state_get_type@Base 1.26.2
  mbim_radio_switch_state_get_string@Base 1.10.0
