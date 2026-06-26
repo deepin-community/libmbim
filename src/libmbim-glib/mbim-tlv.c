@@ -136,19 +136,37 @@ _mbim_tlv_new_from_raw (const guint8  *raw,
                         guint32       *bytes_read,
                         GError       **error)
 {
-    guint32 tlv_size;
+    guint64 tlv_size;
+    struct tlv tlv_header;
 
-    g_assert (raw_length >= sizeof (struct tlv));
-    tlv_size = sizeof (struct tlv) + GUINT32_FROM_LE (((struct tlv *)raw)->data_length) + ((struct tlv *)raw)->padding_length;
-
-    if (tlv_size > raw_length) {
+    if (raw_length < sizeof (struct tlv)) {
         g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_MESSAGE,
-                     "TLV size is larger than message length (%u > %u)",
-                     tlv_size, raw_length);
+                     "Cannot read TLV header: (%u < %" G_GSIZE_FORMAT ")",
+                     raw_length, sizeof (struct tlv));
         return NULL;
     }
 
-    *bytes_read = tlv_size;
+    /* intermediate variable to ensure the data_length value is properly aligned */
+    memcpy (&tlv_header, raw, sizeof (struct tlv));
+    tlv_size = ((guint64)sizeof (struct tlv) +
+                (guint64)GUINT32_FROM_LE (tlv_header.data_length) +
+                (guint64)tlv_header.padding_length);
+
+    if ((guint64)raw_length < tlv_size) {
+        g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_MESSAGE,
+                     "Cannot read full TLV data (%u > %" G_GUINT64_FORMAT ")",
+                     raw_length, tlv_size);
+        return NULL;
+    }
+
+    if (tlv_size > (guint64) G_MAXUINT32) {
+        g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_MESSAGE,
+                     "Unsupported TLV size (%" G_GUINT64_FORMAT " > %u)",
+                     tlv_size, G_MAXUINT32);
+        return NULL;
+    }
+
+    *bytes_read = (guint32)tlv_size;
     return (MbimTlv *) g_byte_array_append (g_byte_array_sized_new (tlv_size), raw, tlv_size);
 }
 
@@ -239,7 +257,7 @@ mbim_tlv_string_new (const gchar  *str,
 
         /* For BE systems, convert from BE to LE */
         if (G_BYTE_ORDER == G_BIG_ENDIAN) {
-            guint i;
+            glong i;
 
             for (i = 0; i < items_written; i++)
                 utf16[i] = GUINT16_TO_LE (utf16[i]);

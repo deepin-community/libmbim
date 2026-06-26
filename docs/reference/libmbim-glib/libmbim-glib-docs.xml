@@ -120,6 +120,16 @@
   </chapter>
 
   <chapter>
+    <title>Fibocom-defined Services</title>
+    <xi:include href="xml/mbim-fibocom.xml"/>
+  </chapter>
+
+  <chapter>
+    <title>Compal-defined expansion Services</title>
+    <xi:include href="xml/mbim-compal.xml"/>
+  </chapter>
+
+  <chapter>
     <title>libmbim-defined Services</title>
     <xi:include href="xml/mbim-proxy-control.xml"/>
   </chapter>
@@ -200,6 +210,10 @@
   <chapter id="api-index-1-30" role="1.30">
     <title>Index of new symbols in 1.30</title>
     <xi:include href="xml/api-index-1.30.xml"></xi:include>
+  </chapter>
+  <chapter id="api-index-1-32" role="1.32">
+    <title>Index of new symbols in 1.32</title>
+    <xi:include href="xml/api-index-1.32.xml"></xi:include>
   </chapter>
 
   <xi:include href="xml/annotation-glossary.xml"><xi:fallback /></xi:include>

@@ -176,6 +176,8 @@ client_unref (Client *client)
     }
 }
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (Client, client_unref)
+
 static Client *
 client_ref (Client *client)
 {
@@ -501,10 +503,6 @@ internal_open (GTask *task)
                       g_object_ref (self));
 }
 
-static void proxy_device_error_cb (MbimDevice *device,
-                                   GError     *error,
-                                   MbimProxy  *self);
-
 static void
 internal_device_open_caps_query_ready (MbimDevice   *device,
                                        GAsyncResult *res,
@@ -515,9 +513,6 @@ internal_device_open_caps_query_ready (MbimDevice   *device,
     g_autoptr(GError)       error = NULL;
 
     self = g_task_get_source_object (task);
-
-    /* Always unblock error signals */
-    g_signal_handlers_unblock_by_func (device, proxy_device_error_cb, self);
 
     response = mbim_device_command_finish (device, res, &error);
     if (!response || !mbim_message_response_get_result (response, MBIM_MESSAGE_TYPE_COMMAND_DONE, &error)) {
@@ -564,11 +559,6 @@ internal_device_open (MbimProxy           *self,
      * (loading caps in this case). */
     if (mbim_device_is_open (device)) {
         MbimMessage *message;
-
-        /* Avoid getting notified of errors in this internal check, as we're
-         * already going to check for the NotOpened error ourselves in the
-         * ready callback, and we'll reopen silently if we find this. */
-        g_signal_handlers_block_by_func (device, proxy_device_error_cb, self);
 
         g_debug ("[%s] checking device caps during client device open...",
                  mbim_device_get_path (device));
@@ -1211,16 +1201,18 @@ parse_request (MbimProxy *self,
 }
 
 static gboolean
-connection_readable_cb (GSocket *socket,
-                        GIOCondition condition,
-                        Client *client)
+connection_readable_cb (GSocket      *socket,
+                        GIOCondition  condition,
+                        Client       *_client)
 {
+    g_autoptr(Client)  client = NULL;
     MbimProxy         *self;
     guint8             buffer[BUFFER_SIZE];
     g_autoptr(GError)  error = NULL;
     gssize             r;
 
     /* Recover proxy pointer soon */
+    client = client_ref (_client);
     self = client->self;
 
     if (condition & G_IO_HUP || condition & G_IO_ERR) {
@@ -1643,7 +1635,6 @@ dispose (GObject *object)
         if (g_socket_service_is_active (priv->socket_service))
             g_socket_service_stop (priv->socket_service);
         g_clear_object (&priv->socket_service);
-        g_unlink (MBIM_PROXY_SOCKET_PATH);
         g_debug ("UNIX socket service at '%s' stopped", MBIM_PROXY_SOCKET_PATH);
     }
 
