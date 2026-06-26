@@ -47,7 +47,7 @@ static gboolean  query_home_provider_flag;
 static gboolean  query_preferred_providers_flag;
 static gboolean  query_visible_providers_flag;
 static gboolean  query_register_state_flag;
-static gboolean  set_register_state_automatic_flag;
+static gchar    *set_register_state_str;
 static gboolean  query_signal_state_flag;
 static gboolean  query_packet_service_flag;
 static gboolean  set_packet_service_attach_flag;
@@ -67,6 +67,10 @@ static gboolean  query_network_idle_hint_flag;
 static gchar    *set_emergency_mode_str;
 static gboolean  query_emergency_mode_flag;
 static gchar    *set_service_activation_str;
+
+/* deprecated */
+static gboolean  register_automatic_flag;
+static gboolean  query_registration_state_flag;
 
 static gboolean query_connection_state_arg_parse (const char *option_name,
                                                   const char *value,
@@ -151,13 +155,13 @@ static GOptionEntry entries[] = {
       "Query visible providers",
       NULL
     },
-    { "query-registration-state", 0, 0, G_OPTION_ARG_NONE, &query_register_state_flag,
-      "Query registration state",
+    { "query-register-state", 0, 0, G_OPTION_ARG_NONE, &query_register_state_flag,
+      "Query register state",
       NULL
     },
-    { "register-automatic", 0, 0, G_OPTION_ARG_NONE, &set_register_state_automatic_flag,
-      "Launch automatic registration",
-      NULL
+    { "set-register-state", 0, 0, G_OPTION_ARG_STRING, &set_register_state_str,
+      "Set basic register settings (allowed keys: action, provider-id, data-class)",
+      "[\"key=value,...\"]"
     },
     { "query-signal-state", 0, 0, G_OPTION_ARG_NONE, &query_signal_state_flag,
       "Query signal state",
@@ -234,6 +238,16 @@ static GOptionEntry entries[] = {
     { "set-service-activation", 0, 0, G_OPTION_ARG_STRING, &set_service_activation_str,
       "Set service activation",
       "[Data]"
+    },
+    /* Deprecated actions. They are kept for compatibility purposes, but should
+     * otherwise not be used in newly written code. */
+    { "query-registration-state", 0, G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_NONE, &query_registration_state_flag,
+      NULL,
+      NULL
+    },
+    { "register-automatic", 0, G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_NONE, &register_automatic_flag,
+      NULL,
+      NULL
     },
     { NULL, 0, 0, 0, NULL, NULL, NULL }
 };
@@ -318,7 +332,7 @@ mbimcli_basic_connect_options_enabled (void)
                  query_home_provider_flag +
                  query_preferred_providers_flag +
                  query_visible_providers_flag +
-                 set_register_state_automatic_flag +
+                 !!set_register_state_str +
                  query_signal_state_flag +
                  query_packet_service_flag +
                  set_packet_service_attach_flag +
@@ -337,7 +351,9 @@ mbimcli_basic_connect_options_enabled (void)
                  query_network_idle_hint_flag +
                  !!set_emergency_mode_str +
                  query_emergency_mode_flag +
-                 !!set_service_activation_str);
+                 !!set_service_activation_str +
+                 query_registration_state_flag +
+                 register_automatic_flag);
 
     if (n_actions > 1) {
         g_printerr ("error: too many Basic Connect actions requested\n");
@@ -727,9 +743,10 @@ set_pin_input_parse (const gchar  *str,
                      gchar       **new_pin,
                      MbimPinType  *pin_type)
 {
-    g_auto(GStrv) split = NULL;
-    guint n_min, n_max, n = 0;
-    MbimPinType new_pin_type;
+    g_auto(GStrv)     split = NULL;
+    guint             n_min, n_max, n = 0;
+    MbimPinType       new_pin_type;
+    g_autoptr(GError) error = NULL;
 
     g_assert (pin != NULL);
     n_min = (new_pin ? 2 : 1);
@@ -760,8 +777,8 @@ set_pin_input_parse (const gchar  *str,
         const gchar *pin_type_str;
 
         pin_type_str = split[n++];
-        if (!mbimcli_read_pin_type_from_string (pin_type_str, &new_pin_type)) {
-            g_printerr ("error: couldn't parse input pin-type: %s\n", pin_type_str);
+        if (!mbimcli_read_pin_type_from_string (pin_type_str, &new_pin_type, &error)) {
+            g_printerr ("error: couldn't parse input pin-type: %s\n", error->message);
             return FALSE;
         }
         if (new_pin_type == MBIM_PIN_TYPE_UNKNOWN ||
@@ -1375,9 +1392,7 @@ connect_activate_properties_handle (const gchar  *key,
         g_free (props->access_string);
         props->access_string = g_strdup (value);
     } else if (g_ascii_strcasecmp (key, "auth") == 0) {
-        if (!mbimcli_read_auth_protocol_from_string (value, &props->auth_protocol)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown auth: '%s'", value);
+        if (!mbimcli_read_auth_protocol_from_string (value, &props->auth_protocol, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "username") == 0) {
@@ -1387,27 +1402,19 @@ connect_activate_properties_handle (const gchar  *key,
         g_free (props->password);
         props->password = g_strdup (value);
     } else if (g_ascii_strcasecmp (key, "ip-type") == 0) {
-        if (!mbimcli_read_context_ip_type_from_string (value, &props->ip_type)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown ip-type: '%s'", value);
+        if (!mbimcli_read_context_ip_type_from_string (value, &props->ip_type, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "compression") == 0) {
-        if (!mbimcli_read_compression_from_string (value, &props->compression)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown compression: '%s'", value);
+        if (!mbimcli_read_compression_from_string (value, &props->compression, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "context-type") == 0) {
-        if (!mbimcli_read_context_type_from_string (value, &props->context_type)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown context-type: '%s'", value);
+        if (!mbimcli_read_context_type_from_string (value, &props->context_type, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "media-type") == 0) {
-        if (!mbimcli_read_access_media_type_from_string (value, &props->media_type)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown media-type: '%s'", value);
+        if (!mbimcli_read_access_media_type_from_string (value, &props->media_type, error)) {
             return FALSE;
         }
     } else {
@@ -1454,8 +1461,8 @@ set_connect_activate_parse (const gchar               *str,
 
             /* Use authentication method */
             if (split[1]) {
-                if (!mbimcli_read_auth_protocol_from_string (split[1], &props->auth_protocol)) {
-                    g_printerr ("error: couldn't parse input string, unknown auth protocol '%s'\n", split[1]);
+                if (!mbimcli_read_auth_protocol_from_string (split[1], &props->auth_protocol, &error)) {
+                    g_printerr ("error: couldn't parse auth protocol: %s\n", error->message);
                     return FALSE;
                 }
                 /* Username */
@@ -1741,6 +1748,46 @@ register_state_ready (MbimDevice   *device,
     }
 
     shutdown (TRUE);
+}
+
+typedef struct {
+    gchar              *provider_id;
+    MbimRegisterAction  action;
+    MbimDataClass       data_class;
+} RegisterStateProperties;
+
+static void
+register_state_properties_clear (RegisterStateProperties *props)
+{
+    g_free (props->provider_id);
+}
+
+G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC(RegisterStateProperties, register_state_properties_clear);
+
+static gboolean
+set_register_state_foreach_cb (const gchar              *key,
+                               const gchar              *value,
+                               GError                  **error,
+                               RegisterStateProperties  *props)
+{
+    if (g_ascii_strcasecmp (key, "action") == 0) {
+        if (!mbimcli_read_register_action_from_string (value, &props->action, error)) {
+            return FALSE;
+        }
+    } else if (g_ascii_strcasecmp (key, "provider-id") == 0) {
+        g_free (props->provider_id);
+        props->provider_id = g_strdup (value);
+    } else if (g_ascii_strcasecmp (key, "data-class") == 0) {
+        if (!mbimcli_read_data_class_mask_from_string (value, &props->data_class, error)) {
+            return FALSE;
+        }
+    } else {
+        g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_FAILED,
+                     "unrecognized option '%s'", key);
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 static void
@@ -2127,9 +2174,9 @@ provisioned_contexts_ready (MbimDevice   *device,
                  provisioned_contexts[i]->context_id,
                  VALIDATE_UNKNOWN (mbim_context_type_get_string (
                      mbim_uuid_to_context_type (&provisioned_contexts[i]->context_type))),
-                 VALIDATE_UNKNOWN (provisioned_contexts[i]->access_string),
-                 VALIDATE_UNKNOWN (provisioned_contexts[i]->user_name),
-                 VALIDATE_UNKNOWN (provisioned_contexts[i]->password),
+                 VALIDATE_EMPTY (provisioned_contexts[i]->access_string),
+                 VALIDATE_EMPTY (provisioned_contexts[i]->user_name),
+                 VALIDATE_EMPTY (provisioned_contexts[i]->password),
                  VALIDATE_UNKNOWN (mbim_compression_get_string (
                      provisioned_contexts[i]->compression)),
                  VALIDATE_UNKNOWN (mbim_auth_protocol_get_string (
@@ -2174,21 +2221,15 @@ set_provisioned_contexts_foreach_cb (const gchar                   *key,
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "context-type") == 0) {
-        if (!mbimcli_read_context_type_from_string (value, &props->context_type)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown context-type: '%s'", value);
+        if (!mbimcli_read_context_type_from_string (value, &props->context_type, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "auth") == 0) {
-        if (!mbimcli_read_auth_protocol_from_string (value, &props->auth_protocol)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown auth: '%s'", value);
+        if (!mbimcli_read_auth_protocol_from_string (value, &props->auth_protocol, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "compression") == 0) {
-        if (!mbimcli_read_compression_from_string (value, &props->compression)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown compression: '%s'", value);
+        if (!mbimcli_read_compression_from_string (value, &props->compression, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "username") == 0) {
@@ -2571,8 +2612,8 @@ mbimcli_basic_connect_run (MbimDevice   *device,
         return;
     }
 
-    /* Query registration status? */
-    if (query_register_state_flag) {
+    /* Query register state? */
+    if (query_register_state_flag || query_registration_state_flag) {
         request = mbim_message_register_state_query_new (NULL);
         mbim_device_command (ctx->device,
                              request,
@@ -2583,9 +2624,27 @@ mbimcli_basic_connect_run (MbimDevice   *device,
         return;
     }
 
-    /* Launch automatic registration? */
-    if (set_register_state_automatic_flag) {
-        request = mbim_message_register_state_set_new (NULL, MBIM_REGISTER_ACTION_AUTOMATIC, 0, &error);
+    /* Update register state? */
+    if (set_register_state_str || register_automatic_flag) {
+        /* defaults for --register-automatic */
+        g_auto(RegisterStateProperties) props = {
+            .provider_id = NULL,
+            .action = MBIM_REGISTER_ACTION_AUTOMATIC,
+            .data_class = 0,
+        };
+
+        if (set_register_state_str) {
+            if (!mbimcli_parse_key_value_string (set_register_state_str,
+                                                 &error,
+                                                 (MbimParseKeyValueForeachFn)set_register_state_foreach_cb,
+                                                 &props)) {
+                g_printerr ("error: couldn't parse input string: %s\n", error->message);
+                shutdown (FALSE);
+                return;
+            }
+        }
+
+        request = mbim_message_register_state_set_new (props.provider_id, props.action, props.data_class, &error);
         if (!request) {
             g_printerr ("error: couldn't create request: %s\n", error->message);
             shutdown (FALSE);
@@ -3008,7 +3067,8 @@ mbimcli_basic_connect_run (MbimDevice   *device,
     if (set_network_idle_hint_str) {
         MbimNetworkIdleHintState  network_state;
 
-        if (!mbimcli_read_network_idle_hint_state_from_string (set_network_idle_hint_str, &network_state)) {
+        if (!mbimcli_read_network_idle_hint_state_from_string (set_network_idle_hint_str, &network_state, &error)) {
+            g_printerr ("error: couldn't read idle hint state: %s\n", error->message);
             shutdown (FALSE);
             return;
         }
@@ -3045,7 +3105,8 @@ mbimcli_basic_connect_run (MbimDevice   *device,
     if (set_emergency_mode_str) {
         MbimEmergencyModeState  emergency_state;
 
-        if (!mbimcli_read_emergency_mode_state_from_string (set_emergency_mode_str, &emergency_state)) {
+        if (!mbimcli_read_emergency_mode_state_from_string (set_emergency_mode_str, &emergency_state, &error)) {
+            g_printerr ("error: couldn't read emergency mode state: %s\n", error->message);
             shutdown (FALSE);
             return;
         }

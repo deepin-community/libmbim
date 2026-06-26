@@ -34,6 +34,7 @@ static Context *ctx;
 /* Options */
 static gchar    *query_pco_str;
 static gboolean  query_lte_attach_configuration_flag;
+static gchar    *set_lte_attach_configuration_str;
 static gboolean  query_lte_attach_status_flag; /* support for the deprecated name */
 static gboolean  query_lte_attach_info_flag;
 static gboolean  query_sys_caps_flag;
@@ -65,6 +66,10 @@ static GOptionEntry entries[] = {
     { "ms-query-lte-attach-configuration", 0, 0, G_OPTION_ARG_NONE, &query_lte_attach_configuration_flag,
       "Query LTE attach configuration",
       NULL
+    },
+    { "ms-set-lte-attach-configuration", 0, 0, G_OPTION_ARG_STRING, &set_lte_attach_configuration_str,
+      "Set LTE attach configurations (groups separated by '/' if more than one, with allowed-keys: ip-type, roaming-control, source, access-string, username, password, compression, auth)",
+      "[(default|restore-factory)[,\"key=value,...\"[/\"key=value,...\"[/\"key=value,...\"]]]"
     },
     { "ms-query-lte-attach-status", 0, G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_NONE, &query_lte_attach_status_flag,
       NULL,
@@ -114,7 +119,7 @@ static GOptionEntry entries[] = {
     { "ms-device-reset", 0, 0, G_OPTION_ARG_NONE, &device_reset_flag,
       "Reset device",
       NULL
-    },    
+    },
     { "ms-query-version", 0, 0,G_OPTION_ARG_STRING , &query_version_str,
       "Exchange supported version information. Since MBIMEx v2.0.",
       "[(MBIM version),(MBIM extended version)]"
@@ -205,6 +210,7 @@ mbimcli_ms_basic_connect_extensions_options_enabled (void)
 
     n_actions = (!!query_pco_str +
                  query_lte_attach_configuration_flag +
+                 !!set_lte_attach_configuration_str +
                  (query_lte_attach_status_flag || query_lte_attach_info_flag) +
                  query_sys_caps_flag +
                  query_device_caps_flag +
@@ -295,8 +301,8 @@ query_pco_ready (MbimDevice   *device,
 }
 
 static void
-query_lte_attach_configuration_ready (MbimDevice   *device,
-                                      GAsyncResult *res)
+lte_attach_configuration_ready (MbimDevice   *device,
+                                GAsyncResult *res)
 {
     g_autoptr(MbimMessage)                     response = NULL;
     g_autoptr(GError)                          error = NULL;
@@ -311,7 +317,7 @@ query_lte_attach_configuration_ready (MbimDevice   *device,
         return;
     }
 
-    g_print ("[%s] Successfully queried LTE attach configuration\n",
+    g_print ("[%s] LTE attach configuration available\n",
              mbim_device_get_path_display (device));
 
     if (!mbim_message_ms_basic_connect_extensions_lte_attach_configuration_response_parse (
@@ -324,21 +330,118 @@ query_lte_attach_configuration_ready (MbimDevice   *device,
         return;
     }
 
-#define VALIDATE_NA(str) (str ? str : "n/a")
     for (i = 0; i < configuration_count; i++) {
         g_print ("Configuration %u:\n", i);
-        g_print ("  IP type:       %s\n", mbim_context_ip_type_get_string (configurations[i]->ip_type));
-        g_print ("  Roaming:       %s\n", mbim_lte_attach_context_roaming_control_get_string (configurations[i]->roaming));
-        g_print ("  Source:        %s\n", mbim_context_source_get_string (configurations[i]->source));
-        g_print ("  Access string: %s\n", VALIDATE_NA (configurations[i]->access_string));
-        g_print ("  Username:      %s\n", VALIDATE_NA (configurations[i]->user_name));
-        g_print ("  Password:      %s\n", VALIDATE_NA (configurations[i]->password));
-        g_print ("  Compression:   %s\n", mbim_compression_get_string (configurations[i]->compression));
-        g_print ("  Auth protocol: %s\n", mbim_auth_protocol_get_string (configurations[i]->auth_protocol));
+        g_print ("  IP type:       '%s'\n", VALIDATE_UNKNOWN (mbim_context_ip_type_get_string (configurations[i]->ip_type)));
+        g_print ("  Roaming:       '%s'\n", VALIDATE_UNKNOWN (mbim_lte_attach_context_roaming_control_get_string (configurations[i]->roaming)));
+        g_print ("  Source:        '%s'\n", VALIDATE_UNKNOWN (mbim_context_source_get_string (configurations[i]->source)));
+        g_print ("  Access string: '%s'\n", VALIDATE_EMPTY (configurations[i]->access_string));
+        g_print ("  Username:      '%s'\n", VALIDATE_EMPTY (configurations[i]->user_name));
+        g_print ("  Password:      '%s'\n", VALIDATE_EMPTY (configurations[i]->password));
+        g_print ("  Compression:   '%s'\n", VALIDATE_UNKNOWN (mbim_compression_get_string (configurations[i]->compression)));
+        g_print ("  Auth protocol: '%s'\n", VALIDATE_UNKNOWN (mbim_auth_protocol_get_string (configurations[i]->auth_protocol)));
     }
-#undef VALIDATE_NA
 
     shutdown (TRUE);
+}
+
+static gboolean
+set_lte_attach_configuration_foreach_cb (const gchar                 *key,
+                                         const gchar                 *value,
+                                         GError                     **error,
+                                         MbimLteAttachConfiguration  *configuration)
+{
+    if (g_ascii_strcasecmp (key, "ip-type") == 0) {
+        if (!mbimcli_read_context_ip_type_from_string (value, &configuration->ip_type, error)) {
+            return FALSE;
+        }
+    } else if (g_ascii_strcasecmp (key, "roaming-control") == 0) {
+        if (!mbimcli_read_lte_attach_context_roaming_control_from_string (value, &configuration->roaming, error)) {
+            return FALSE;
+        }
+    } else if (g_ascii_strcasecmp (key, "source") == 0) {
+        if (!mbimcli_read_context_source_from_string (value, &configuration->source, error)) {
+            return FALSE;
+        }
+    } else if (g_ascii_strcasecmp (key, "auth") == 0) {
+        if (!mbimcli_read_auth_protocol_from_string (value, &configuration->auth_protocol, error)) {
+            return FALSE;
+        }
+    } else if (g_ascii_strcasecmp (key, "compression") == 0) {
+        if (!mbimcli_read_compression_from_string (value, &configuration->compression, error)) {
+            return FALSE;
+        }
+    } else if (g_ascii_strcasecmp (key, "username") == 0) {
+        g_free (configuration->user_name);
+        configuration->user_name = g_strdup (value);
+    } else if (g_ascii_strcasecmp (key, "password") == 0) {
+        g_free (configuration->password);
+        configuration->password = g_strdup (value);
+    } else if (g_ascii_strcasecmp (key, "access-string") == 0) {
+        g_free (configuration->access_string);
+        configuration->access_string = g_strdup (value);
+    } else {
+        g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_FAILED,
+                     "unrecognized option '%s'", key);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static gboolean
+set_lte_attach_configuration_input_parse (const gchar                      *str,
+                                          MbimLteAttachContextOperation    *out_operation,
+                                          guint32                          *out_configuration_count,
+                                          MbimLteAttachConfigurationArray **out_configurations,
+                                          GError                          **error)
+{
+    g_auto(GStrv)                              outer_split = NULL;
+    g_auto(GStrv)                              inner_split = NULL;
+    g_autoptr(MbimLteAttachConfigurationArray) configurations = NULL;
+    guint32                                    configuration_count;
+    guint                                      i;
+
+    /* The first element in the string must be the operation. Split in two items,
+     * the second one will contain all the list of configuration groups. */
+    outer_split = g_strsplit (str, ",", 2);
+
+    if (!outer_split || !outer_split[0]) {
+        g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_FAILED,
+                     "no operation specified");
+        return FALSE;
+    }
+
+    g_strstrip (outer_split[0]);
+    if (!mbimcli_read_lte_attach_context_operation_from_string (outer_split[0], out_operation, error))
+        return FALSE;
+
+    *out_configuration_count = 0;
+    *out_configurations = NULL;
+
+    /* This is allowed when restoring defaults */
+    if (!outer_split[1])
+        return TRUE;
+
+    inner_split = g_strsplit_set (outer_split[1], "/", -1);
+    g_assert (inner_split);
+
+    /* This array is compatible with mbim_lte_attach_configuration_array_free() */
+    configuration_count = g_strv_length (inner_split);
+    configurations = g_new0 (MbimLteAttachConfiguration *, configuration_count + 1);
+    for (i = 0; i < configuration_count; i++) {
+        configurations[i] = g_new0 (MbimLteAttachConfiguration, 1);
+        if (!mbimcli_parse_key_value_string (inner_split[i],
+                                             error,
+                                             (MbimParseKeyValueForeachFn)set_lte_attach_configuration_foreach_cb,
+                                             configurations[i])) {
+            return FALSE;
+        }
+    }
+
+    *out_configuration_count = configuration_count;
+    *out_configurations = g_steal_pointer (&configurations);
+    return TRUE;
 }
 
 static void
@@ -404,30 +507,28 @@ query_lte_attach_info_ready (MbimDevice   *device,
                  mbim_device_get_path_display (device));
     }
 
-#define VALIDATE_NA(str) (str ? str : "n/a")
-    g_print ("  Attach state:  %s\n", mbim_lte_attach_state_get_string (lte_attach_state));
-    g_print ("  IP type:       %s\n", mbim_context_ip_type_get_string (ip_type));
-    g_print ("  Access string: %s\n", VALIDATE_NA (access_string));
-    g_print ("  Username:      %s\n", VALIDATE_NA (user_name));
-    g_print ("  Password:      %s\n", VALIDATE_NA (password));
-    g_print ("  Compression:   %s\n", mbim_compression_get_string (compression));
-    g_print ("  Auth protocol: %s\n", mbim_auth_protocol_get_string (auth_protocol));
+    g_print ("  Attach state:  '%s'\n", VALIDATE_UNKNOWN (mbim_lte_attach_state_get_string (lte_attach_state)));
+    g_print ("  IP type:       '%s'\n", VALIDATE_UNKNOWN (mbim_context_ip_type_get_string (ip_type)));
+    g_print ("  Access string: '%s'\n", VALIDATE_EMPTY (access_string));
+    g_print ("  Username:      '%s'\n", VALIDATE_EMPTY (user_name));
+    g_print ("  Password:      '%s'\n", VALIDATE_EMPTY (password));
+    g_print ("  Compression:   '%s'\n", VALIDATE_UNKNOWN (mbim_compression_get_string (compression)));
+    g_print ("  Auth protocol: '%s'\n", VALIDATE_UNKNOWN (mbim_auth_protocol_get_string (auth_protocol)));
     if (mbim_device_check_ms_mbimex_version (device, 3, 0)) {
         if (nw_error == 0)
-            g_print ("  Network error: none\n");
+            g_print ("  Network error: 'none'\n");
         else if (nw_error == 0xFFFFFFFF)
-            g_print ("  Network error: unknown\n");
+            g_print ("  Network error: 'unknown'\n");
         else {
             const gchar *nw_error_str;
 
             nw_error_str = mbim_nw_error_get_string (nw_error);
             if (nw_error_str)
-                g_print ("  Network error: %s\n", nw_error_str);
+                g_print ("  Network error: '%s'\n", nw_error_str);
             else
-                g_print ("  Network error: unknown (0x%08x)\n", nw_error);
+                g_print ("  Network error: 'unknown' (0x%08x)\n", nw_error);
         }
     }
-#undef VALIDATE_NA
 
     shutdown (TRUE);
 }
@@ -874,57 +975,39 @@ set_provisioned_contexts_foreach_cb (const gchar                   *key,
                                      ProvisionedContextProperties  *props)
 {
     if (g_ascii_strcasecmp (key, "operation") == 0) {
-        if (!mbimcli_read_context_operation_from_string (value, &props->operation)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown operation: '%s'", value);
+        if (!mbimcli_read_context_operation_from_string (value, &props->operation, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "context-type") == 0) {
-        if (!mbimcli_read_context_type_from_string (value, &props->context_type)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown context-type: '%s'", value);
+        if (!mbimcli_read_context_type_from_string (value, &props->context_type, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "ip-type") == 0) {
-        if (!mbimcli_read_context_ip_type_from_string (value, &props->ip_type)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown ip-type: '%s'", value);
+        if (!mbimcli_read_context_ip_type_from_string (value, &props->ip_type, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "state") == 0) {
-        if (!mbimcli_read_context_state_from_string (value, &props->state)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown state: '%s'", value);
+        if (!mbimcli_read_context_state_from_string (value, &props->state, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "roaming-control") == 0) {
-        if (!mbimcli_read_context_roaming_control_from_string (value, &props->roaming_control)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown roaming-control: '%s'", value);
+        if (!mbimcli_read_context_roaming_control_from_string (value, &props->roaming_control, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "media-type") == 0) {
-        if (!mbimcli_read_context_media_type_from_string (value, &props->media_type)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown media-type: '%s'", value);
+        if (!mbimcli_read_context_media_type_from_string (value, &props->media_type, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "source") == 0) {
-        if (!mbimcli_read_context_source_from_string (value, &props->source)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown source: '%s'", value);
+        if (!mbimcli_read_context_source_from_string (value, &props->source, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "auth") == 0) {
-        if (!mbimcli_read_auth_protocol_from_string (value, &props->auth_protocol)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown auth: '%s'", value);
+        if (!mbimcli_read_auth_protocol_from_string (value, &props->auth_protocol, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "compression") == 0) {
-        if (!mbimcli_read_compression_from_string (value, &props->compression)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown compression: '%s'", value);
+        if (!mbimcli_read_compression_from_string (value, &props->compression, error)) {
             return FALSE;
         }
     } else if (g_ascii_strcasecmp (key, "username") == 0) {
@@ -1420,30 +1503,22 @@ set_registration_parameters_foreach_cb (const gchar             *key,
                                         RegistrationParameters  *params)
 {
     if (g_ascii_strcasecmp (key, "mico-mode") == 0) {
-        if (!mbimcli_read_mico_mode_from_string (value, &params->mico_mode)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown mico-mode: '%s'", value);
+        if (!mbimcli_read_mico_mode_from_string (value, &params->mico_mode, error)) {
             return FALSE;
         }
         params->mico_mode_set = TRUE;
     } else if (g_ascii_strcasecmp (key, "drx-cycle") == 0) {
-        if (!mbimcli_read_drx_cycle_from_string (value, &params->drx_cycle)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown drx-cycle: '%s'", value);
+        if (!mbimcli_read_drx_cycle_from_string (value, &params->drx_cycle, error)) {
             return FALSE;
         }
         params->drx_cycle_set = TRUE;
     } else if (g_ascii_strcasecmp (key, "ladn-info") == 0) {
-        if (!mbimcli_read_ladn_info_from_string (value, &params->ladn_info)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown ladn-info: '%s'", value);
+        if (!mbimcli_read_ladn_info_from_string (value, &params->ladn_info, error)) {
             return FALSE;
         }
         params->ladn_info_set = TRUE;
     } else if (g_ascii_strcasecmp (key, "default-pdu-activation-hint") == 0) {
-        if (!mbimcli_read_default_pdu_activation_hint_from_string (value, &params->pdu_hint)) {
-            g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_ARGS,
-                         "unknown default-pdu-activation-hint: '%s'", value);
+        if (!mbimcli_read_default_pdu_activation_hint_from_string (value, &params->pdu_hint, error)) {
             return FALSE;
         }
         params->pdu_hint_set = TRUE;
@@ -1725,7 +1800,45 @@ mbimcli_ms_basic_connect_extensions_run (MbimDevice   *device,
                              request,
                              10,
                              ctx->cancellable,
-                             (GAsyncReadyCallback)query_lte_attach_configuration_ready,
+                             (GAsyncReadyCallback)lte_attach_configuration_ready,
+                             NULL);
+        return;
+    }
+
+    if (set_lte_attach_configuration_str) {
+        MbimLteAttachContextOperation              operation = MBIM_LTE_ATTACH_CONTEXT_OPERATION_DEFAULT;
+        g_autoptr(MbimLteAttachConfigurationArray) configurations = NULL;
+        guint32                                    configuration_count = 0;
+
+        g_debug ("Asynchronously setting LTE attach configuration...");
+
+        if (!set_lte_attach_configuration_input_parse (
+                set_lte_attach_configuration_str,
+                &operation,
+                &configuration_count,
+                &configurations,
+                &error)) {
+            g_printerr ("error: couldn't parse setting argument: %s\n", error->message);
+            shutdown (FALSE);
+            return;
+        }
+
+        request = mbim_message_ms_basic_connect_extensions_lte_attach_configuration_set_new (
+                      operation,
+                      configuration_count,
+                      (const MbimLteAttachConfiguration * const*)configurations,
+                      &error);
+        if (!request) {
+            g_printerr ("error: couldn't create request: %s\n", error->message);
+            shutdown (FALSE);
+            return;
+        }
+
+        mbim_device_command (ctx->device,
+                             request,
+                             10,
+                             ctx->cancellable,
+                             (GAsyncReadyCallback)lte_attach_configuration_ready,
                              NULL);
         return;
     }

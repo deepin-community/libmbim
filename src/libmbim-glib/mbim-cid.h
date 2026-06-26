@@ -309,18 +309,20 @@ typedef enum { /*< since=1.16 >*/
  * @MBIM_CID_QDU_FILE_WRITE: Write QDU file for firmware update.
  * @MBIM_CID_QDU_QUECTEL_REBOOT: Reboot to Emergency Download (Quectel specific). Since 1.28.
  * @MBIM_CID_QDU_QUECTEL_READ_VERSION: Read firmware version (Quectel specific). Since 1.28.
+ * @MBIM_CID_QDU_COMMAND: Send AT or system command by mbim port. Since 1.32.
  *
  * MBIM commands in the %MBIM_SERVICE_QDU service.
  *
  * Since: 1.26
  */
 typedef enum { /*< since=1.26 >*/
-    MBIM_CID_QDU_UNKNOWN             = 0,
-    MBIM_CID_QDU_UPDATE_SESSION      = 1,
-    MBIM_CID_QDU_FILE_OPEN           = 2,
-    MBIM_CID_QDU_FILE_WRITE          = 3,
-    MBIM_CID_QDU_QUECTEL_REBOOT      = 4,
-    MBIM_CID_QDU_QUECTEL_READ_VERSION = 7
+    MBIM_CID_QDU_UNKNOWN              = 0,
+    MBIM_CID_QDU_UPDATE_SESSION       = 1,
+    MBIM_CID_QDU_FILE_OPEN            = 2,
+    MBIM_CID_QDU_FILE_WRITE           = 3,
+    MBIM_CID_QDU_QUECTEL_REBOOT       = 4,
+    MBIM_CID_QDU_QUECTEL_READ_VERSION = 7,
+    MBIM_CID_QDU_COMMAND              = 8
 } MbimCidQdu;
 
 /**
@@ -484,6 +486,34 @@ typedef enum { /*< since=1.30 >*/
     MBIM_CID_GOOGLE_UNKNOWN      = 0,
     MBIM_CID_GOOGLE_CARRIER_LOCK = 1,
 } MbimCidGoogle;
+
+/**
+ * MbimCidFibocom:
+ * @MBIM_CID_FIBOCOM_UNKNOWN: Unknown command.
+ * @MBIM_CID_FIBOCOM_AT_COMMAND: AT over MBIM message.
+ *
+ * MBIM commands in the %MBIM_SERVICE_FIBOCOM service.
+ *
+ * Since: 1.32
+ */
+typedef enum { /*< since=1.32 >*/
+    MBIM_CID_FIBOCOM_UNKNOWN      = 0,
+    MBIM_CID_FIBOCOM_AT_COMMAND   = 1,
+} MbimCidFibocom;
+
+/**
+ * MbimCidCompal:
+ * @MBIM_CID_COMPAL_UNKNOWN: Unknown command.
+ * @MBIM_CID_COMPAL_AT_COMMAND: AT over MBIM message.
+ *
+ * MBIM commands in the %MBIM_SERVICE_COMPAL service.
+ *
+ * Since: 1.32
+ */
+typedef enum { /*< since=1.32 >*/
+    MBIM_CID_COMPAL_UNKNOWN    = 0,
+    MBIM_CID_COMPAL_AT_COMMAND = 1,
+} MbimCidCompal;
 
 /**
  * mbim_cid_can_set:

@@ -514,6 +514,7 @@ class Struct:
             '_mbim_message_read_${name_underscore}_struct (\n'
             '    const MbimMessage *self,\n'
             '    guint32 relative_offset,\n'
+            '    guint32 explicit_struct_size,\n'
             '    guint32 *bytes_read,\n'
             '    GError **error)\n'
             '{\n'
@@ -530,7 +531,6 @@ class Struct:
             '\n'
             '    out = g_new0 (${name}, 1);\n'
             '\n')
-
 
         for field in self.contents:
             translations['field_name_underscore'] = utils.build_underscore_name_from_camelcase(field['name'])
@@ -579,17 +579,28 @@ class Struct:
                 # fro the variable buffer, which is currently not implemented for this type.
                 if self.ms_struct_array_member == True:
                     raise ValueError('type unsupported in \'ms-struct-array\'')
-
                 inner_template += (
                     '\n'
                     '    {\n'
                     '        const guint8 *tmp;\n'
-                    '\n'
-                    '        if (!_mbim_message_read_byte_array (self, relative_offset, offset, FALSE, FALSE, 0, &tmp, &(out->${field_name_underscore}_size), error, FALSE))\n'
-                    '            goto out;\n'
+                    '\n')
+                if self.ref_struct_array_member == True:
+                    # When the unsized-byte-array is given inside a struct, its length may already be known, e.g. if the
+                    # array is a ref-struct-array of OL pairs (the 'L' length of the array item implicitly defines the
+                    # length of the byte array. In this case, we must provide an explicit_array_size and avoid trying
+                    # to read until the end of the message.
+                    inner_template += (
+                        '        out->${field_name_underscore}_size = explicit_struct_size - (offset - relative_offset);\n'
+                        '        if (!_mbim_message_read_byte_array (self, relative_offset, offset, FALSE, FALSE, out->${field_name_underscore}_size, &tmp, NULL, error, FALSE))\n'
+                        '                goto out;\n')
+                else:
+                    inner_template += (
+                        '        if (!_mbim_message_read_byte_array (self, relative_offset, offset, FALSE, FALSE, 0, &tmp, &(out->${field_name_underscore}_size), error, FALSE))\n'
+                        '                goto out;\n')
+                inner_template += (
                     '        out->${field_name_underscore} = g_malloc (out->${field_name_underscore}_size);\n'
                     '        memcpy (out->${field_name_underscore}, tmp, out->${field_name_underscore}_size);\n'
-                    '        /* no offset update expected, this should be the last field */\n'
+                    '        offset += out->${field_name_underscore}_size;\n'
                     '    }\n')
             elif field['format'] == 'byte-array':
                 translations['array_size'] = field['array-size']
@@ -690,33 +701,27 @@ class Struct:
             '    success = TRUE;\n'
             '\n'
             ' out:\n'
-            '    if (success) {\n')
+            '    if (success) {\n'
+            '        guint32 total_bytes_read = (offset - relative_offset);\n'
+            '\n')
+
         if self.ms_struct_array_member == True:
             template += (
-                '        if (bytes_read)\n'
-                '            *bytes_read = (offset - relative_offset) + extra_bytes_read;\n'
-                '        return out;\n'
-                '    }\n'
-                '\n')
-        else:
-            template += (
-                '        if (bytes_read)\n'
-                '            *bytes_read = (offset - relative_offset);\n'
-                '        return out;\n'
-                '    }\n'
-                '\n')
+                '        total_bytes_read += extra_bytes_read;\n')
 
-        for field in self.contents:
-            translations['field_name_underscore'] = utils.build_underscore_name_from_camelcase(field['name'])
-            inner_template = ''
-            if field['format'] in ['ref-byte-array', 'ref-byte-array-no-offset', 'unsized-byte-array', 'byte-array', 'string']:
-                inner_template = ('    g_free (out->${field_name_underscore});\n')
-            elif field['format'] == 'string-array':
-                inner_template = ('    g_strfreev (out->${field_name_underscore});\n')
-            template += string.Template(inner_template).substitute(translations)
-
+        # Until now we have validated that all fields read did fit in the contents of the message,
+        # but we have not validated that the fields fit in the given explicit struct size, if given.
         template += (
-            '    g_free (out);\n'
+            '        if (!explicit_struct_size || total_bytes_read <= explicit_struct_size) {\n'
+            '            if (bytes_read)\n'
+            '                *bytes_read = total_bytes_read;\n'
+            '            return out;\n'
+            '        }\n'
+            '        g_set_error (error, MBIM_CORE_ERROR, MBIM_CORE_ERROR_INVALID_MESSAGE,\n'
+            '                     \"Read %u bytes from struct with size %u\", total_bytes_read, explicit_struct_size);\n'
+            '    }\n'
+            '\n'
+            '    _${name_underscore}_free (out);\n'
             '    return NULL;\n'
             '}\n')
         cfile.write(string.Template(template).substitute(translations))
@@ -750,7 +755,7 @@ class Struct:
                 '        return TRUE;\n'
                 '    }\n'
                 '\n'
-                '    out = _mbim_message_read_${name_underscore}_struct (self, offset, NULL, error);\n'
+                '    out = _mbim_message_read_${name_underscore}_struct (self, offset, size, NULL, error);\n'
                 '    if (!out)\n'
                 '        return FALSE;\n'
                 '    *out_struct = out;\n'
@@ -792,7 +797,7 @@ class Struct:
                 '    for (i = 0; i < array_size; i++, offset += ${struct_size}) {\n'
                 '        ${name} *array_item;\n'
                 '\n'
-                '        array_item = _mbim_message_read_${name_underscore}_struct (self, offset, NULL, error);\n'
+                '        array_item = _mbim_message_read_${name_underscore}_struct (self, offset, ${struct_size}, NULL, error);\n'
                 '        if (!array_item)\n'
                 '            return FALSE;\n'
                 '        g_ptr_array_add (out, array_item);\n'
@@ -829,12 +834,15 @@ class Struct:
                 '    offset = relative_offset_array_start;\n'
                 '    for (i = 0; i < array_size; i++, offset += 8) {\n'
                 '        guint32 tmp_offset;\n'
+                '        guint32 tmp_length;\n'
                 '        ${name} *array_item;\n'
                 '\n'
                 '        if (!_mbim_message_read_guint32 (self, offset, &tmp_offset, error)) \n'
                 '            return FALSE;\n'
+                '        if (!_mbim_message_read_guint32 (self, offset + 4, &tmp_length, error)) \n'
+                '            return FALSE;\n'
                 '\n'
-                '        array_item = _mbim_message_read_${name_underscore}_struct (self, tmp_offset, NULL, error);\n'
+                '        array_item = _mbim_message_read_${name_underscore}_struct (self, tmp_offset, tmp_length, NULL, error);\n'
                 '        if (!array_item)\n'
                 '            return FALSE;\n'
                 '        g_ptr_array_add (out, array_item);\n'
@@ -894,7 +902,7 @@ class Struct:
                 '    for (i = 0; i < array_size; i++, intermediate_struct_offset += bytes_read) {\n'
                 '        ${name} *array_item;\n'
                 '\n'
-                '        array_item = _mbim_message_read_${name_underscore}_struct (self, intermediate_struct_offset, &bytes_read, error);\n'
+                '        array_item = _mbim_message_read_${name_underscore}_struct (self, intermediate_struct_offset, 0, &bytes_read, error);\n'
                 '        if (!array_item)\n'
                 '            return FALSE;\n'
                 '        g_ptr_array_add (out, array_item);\n'
@@ -1067,6 +1075,7 @@ class Struct:
                 '        guint32 length;\n'
                 '        guint32 offset_offset;\n'
                 '        GByteArray *raw;\n'
+                '        static const guint8 padding = 0x00;\n'
                 '\n'
                 '        raw = _${name_underscore}_struct_new (values[i]);\n'
                 '        g_assert (raw->len > 0);\n'
@@ -1087,6 +1096,9 @@ class Struct:
                 '\n'
                 '        /* And finally, the bytearray itself to the variable buffer */\n'
                 '        g_byte_array_append (builder->variable_buffer, (const guint8 *)raw->data, (guint)raw->len);\n'
+                '        /* Align the structs at 4 byte boundary, as we may have unsized byte arrays */\n'
+                '        while (builder->variable_buffer->len % 4 != 0)\n'
+                '            g_byte_array_append (builder->variable_buffer, &padding, sizeof (padding));\n'
                 '        g_byte_array_unref (raw);\n'
                 '    }\n'
                 '}\n'
